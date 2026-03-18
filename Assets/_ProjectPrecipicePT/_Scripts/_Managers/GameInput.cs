@@ -74,5 +74,10 @@ namespace ProjectPrecipicePT
         {
             return _playerInput.Player.Sprint.IsPressed();
         }
+
+        public bool IsClimbingPressed()
+        {
+            return _playerInput.Player.Climbing.IsPressed();
+        }
     }
 }
