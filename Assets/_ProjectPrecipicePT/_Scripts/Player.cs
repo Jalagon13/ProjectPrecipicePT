@@ -6,21 +6,21 @@ namespace ProjectPrecipicePT
     public class Player : MonoBehaviour
     {
         [Header("Movement")]
-        [SerializeField] private float walkSpeed = 4.5f;
-        [SerializeField] private float sprintSpeed = 7.5f;
-        [SerializeField] private float airMoveMultiplier = 0.6f;
-        [SerializeField] private float jumpHeight = 1.4f;
-        [SerializeField] private float jumpCooldown = 0.15f;
+        [SerializeField] private float _walkSpeed = 4.5f;
+        [SerializeField] private float _sprintSpeed = 7.5f;
+        [SerializeField] private float _airMoveMultiplier = 0.6f;
+        [SerializeField] private float _jumpHeight = 1.4f;
+        [SerializeField] private float _jumpCooldown = 0.15f;
 
         [Header("Vertical Movement")]
-        [SerializeField] private float gravity = 25f;
-        [SerializeField] private float terminalVelocity = 53f;
-        [SerializeField] private float stickToGroundForce = 5f;
+        [SerializeField] private float _gravity = 25f;
+        [SerializeField] private float _terminalVelocity = 53f;
+        [SerializeField] private float _stickToGroundForce = 5f;
 
         [Header("Look")]
-        [SerializeField] private float lookSensitivityX = 0.12f;
-        [SerializeField] private float lookSensitivityY = 0.12f;
-        [SerializeField] private float maxLookPitch = 80f;
+        [SerializeField] private float _lookSensitivityX = 0.12f;
+        [SerializeField] private float _lookSensitivityY = 0.12f;
+        [SerializeField] private float _maxLookPitch = 80f;
 
         private CharacterController _characterController;
         private Transform _cameraTransform;
@@ -80,9 +80,9 @@ namespace ProjectPrecipicePT
 
             Vector2 lookInput = GameInput.Instance.GetLookVector();
 
-            transform.Rotate(Vector3.up, lookInput.x * lookSensitivityX);
+            transform.Rotate(Vector3.up, lookInput.x * _lookSensitivityX);
 
-            _pitch = Mathf.Clamp(_pitch - (lookInput.y * lookSensitivityY), -maxLookPitch, maxLookPitch);
+            _pitch = Mathf.Clamp(_pitch - (lookInput.y * _lookSensitivityY), -_maxLookPitch, _maxLookPitch);
             _cameraTransform.localRotation = Quaternion.Euler(_pitch, 0f, 0f);
         }
 
@@ -101,25 +101,25 @@ namespace ProjectPrecipicePT
             {
                 if (_verticalVelocity < 0f)
                 {
-                    _verticalVelocity = -stickToGroundForce;
+                    _verticalVelocity = -_stickToGroundForce;
                 }
 
                 if (GameInput.Instance.IsJumpPressedThisFrame() && Time.time >= _nextJumpTime)
                 {
-                    _verticalVelocity = Mathf.Sqrt(jumpHeight * 2f * gravity);
-                    _nextJumpTime = Time.time + jumpCooldown;
+                    _verticalVelocity = Mathf.Sqrt(_jumpHeight * 2f * _gravity);
+                    _nextJumpTime = Time.time + _jumpCooldown;
                 }
             }
             else
             {
-                _verticalVelocity = Mathf.Max(_verticalVelocity - (gravity * Time.deltaTime), -terminalVelocity);
+                _verticalVelocity = Mathf.Max(_verticalVelocity - (_gravity * Time.deltaTime), -_terminalVelocity);
             }
 
             float moveSpeed = GameInput.Instance.IsSprintPressed() && moveInput.sqrMagnitude > 0.0001f
-                ? sprintSpeed
-                : walkSpeed;
+                ? _sprintSpeed
+                : _walkSpeed;
 
-            float movementMultiplier = isGrounded ? 1f : airMoveMultiplier;
+            float movementMultiplier = isGrounded ? 1f : _airMoveMultiplier;
             Vector3 horizontalVelocity = moveDirection * (moveSpeed * movementMultiplier);
             Vector3 velocity = horizontalVelocity + (Vector3.up * _verticalVelocity);
 

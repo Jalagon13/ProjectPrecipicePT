@@ -8,7 +8,7 @@
     "EnableGameObjectLayer": false,
     "EnableHierarchyRows": true,
     "EnableHierarchyLines": true,
-    "EnableHierarchyButtons": true,
+    "EnableHierarchyButtons": false,
     "EnableHeaderUtilities": true,
     "EnableMajorShortcuts": true,
     "DisableHierarchyDesignerDuringPlayMode": true,
