@@ -5,21 +5,32 @@ namespace ProjectPrecipicePT
     public class PlayerLocomotionState : MonoBehaviour
     {
         [Header("Movement")]
-        [SerializeField] private float _walkSpeed = 4.5f;
-        [SerializeField] private float _sprintSpeed = 7.5f;
-        [SerializeField] private float _airMoveMultiplier = 0.6f;
-        [SerializeField] private float _jumpHeight = 1.4f;
-        [SerializeField] private float _jumpCooldown = 0.15f;
+        [SerializeField, Tooltip("Base movement speed while walking on the ground.")]
+        private float _walkSpeed = 4.5f;
+        [SerializeField, Tooltip("Movement speed while sprint is held and the player is moving.")]
+        private float _sprintSpeed = 7.5f;
+        [SerializeField, Tooltip("Multiplier applied to horizontal movement while airborne.")]
+        private float _airMoveMultiplier = 0.6f;
+        [SerializeField, Tooltip("Target jump height reached when jumping from the ground.")]
+        private float _jumpHeight = 1.4f;
+        [SerializeField, Tooltip("Minimum time that must pass before another jump can start.")]
+        private float _jumpCooldown = 0.15f;
 
         [Header("Vertical Movement")]
-        [SerializeField] private float _gravity = 25f;
-        [SerializeField] private float _terminalVelocity = 53f;
-        [SerializeField] private float _stickToGroundForce = 5f;
+        [SerializeField, Tooltip("Downward acceleration applied while the player is airborne.")]
+        private float _gravity = 25f;
+        [SerializeField, Tooltip("Maximum downward speed while falling.")]
+        private float _terminalVelocity = 53f;
+        [SerializeField, Tooltip("Small downward force used to keep the controller grounded on slopes.")]
+        private float _stickToGroundForce = 5f;
 
         [Header("Look")]
-        [SerializeField] private float _lookSensitivityX = 0.12f;
-        [SerializeField] private float _lookSensitivityY = 0.12f;
-        [SerializeField] private float _maxLookPitch = 80f;
+        [SerializeField, Tooltip("Horizontal mouse look sensitivity.")]
+        private float _lookSensitivityX = 0.12f;
+        [SerializeField, Tooltip("Vertical mouse look sensitivity.")]
+        private float _lookSensitivityY = 0.12f;
+        [SerializeField, Tooltip("Maximum up and down look angle while in normal locomotion.")]
+        private float _maxLookPitch = 80f;
 
         private Player _player;
         private float _verticalVelocity;
@@ -28,8 +39,6 @@ namespace ProjectPrecipicePT
         public float LookSensitivityX => _lookSensitivityX;
         public float LookSensitivityY => _lookSensitivityY;
         public float MaxLookPitch => _maxLookPitch;
-        public float StickToGroundForce => _stickToGroundForce;
-
         private void Awake()
         {
             _player = GetComponent<Player>();
