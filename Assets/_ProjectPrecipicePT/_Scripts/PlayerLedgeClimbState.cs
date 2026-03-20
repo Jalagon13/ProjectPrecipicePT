@@ -4,6 +4,8 @@ namespace ProjectPrecipicePT
 {
     public class PlayerLedgeClimbState : MonoBehaviour
     {
+        private const float RotationBlendStart = 0.5f;
+
         [Header("Ledge Climb")]
         [SerializeField, Tooltip("How far above the player the ledge probe starts when searching for a standable top surface.")]
         private float _ledgeProbeUpOffset = 0.9f;
@@ -58,6 +60,7 @@ namespace ProjectPrecipicePT
             _locomotionState = GetComponent<PlayerLocomotionState>();
         }
 
+        // Stores the start and end poses for the mantle sequence.
         public void Begin(Vector3 targetPosition)
         {
             _startPosition = _player.PlayerTransform.position;
@@ -70,47 +73,91 @@ namespace ProjectPrecipicePT
             _player.SetState(Player.PlayerStateType.LedgeClimb);
         }
 
+        // Ledge climb sequence:
+        // 1. move the player onto the top surface
+        // 2. drive the special camera look sequence
+        // 3. blend root/model back to the upright locomotion pose
         public void Tick()
         {
-            _timer += Time.deltaTime;
-            float duration = Mathf.Max(0.01f, _ledgeClimbDuration);
-            float t = Mathf.Clamp01(_timer / duration);
-            float easedT = Mathf.SmoothStep(0f, 1f, t);
-            _player.PlayerTransform.position = Vector3.Lerp(_startPosition, _targetPosition, easedT);
-            UpdateCameraSequence(t);
-
-            if (t < 0.5f)
-            {
-                _player.PlayerTransform.rotation = _startRotation;
-                ApplyModelRotation(_startModelRotation);
-            }
-            else
-            {
-                float rotationT = Mathf.InverseLerp(0.5f, 1f, t);
-                float easedRotationT = Mathf.SmoothStep(0f, 1f, rotationT);
-                _player.PlayerTransform.rotation = Quaternion.Slerp(_startRotation, _targetRotation, easedRotationT);
-                ApplyModelRotation(Quaternion.Slerp(_startModelRotation, _targetModelRotation, easedRotationT));
-            }
-
-            if (t >= 1f)
-            {
-                _player.PlayerTransform.position = _targetPosition;
-                ApplyModelRotation(_targetModelRotation);
-                _player.AlignRootToCameraYaw();
-                _player.ResetClimbCamera();
-                _locomotionState.ForceGroundedRecovery();
-                _player.SetState(Player.PlayerStateType.Locomotion);
-            }
+            float normalizedTime = GetNormalizedSequenceTime();
+            ApplySequencePosition(normalizedTime);
+            UpdateCameraSequence(normalizedTime);
+            ApplySequenceRotation(normalizedTime);
+            FinishSequenceIfComplete(normalizedTime);
         }
 
         private void UpdateCameraSequence(float normalizedTime)
         {
-            if (_player.ModelTransform == null)
+            if (!TryGetHorizontalSequenceForward(out Vector3 horizontalForward))
             {
                 return;
             }
 
-            Vector3 horizontalForward = Vector3.ProjectOnPlane(_player.ModelTransform.forward, Vector3.up);
+            float lookDownBlend = GetLookDownBlend(normalizedTime);
+            Vector3 rightAxis = Vector3.Cross(Vector3.up, horizontalForward).normalized;
+            if (rightAxis.sqrMagnitude <= 0.0001f)
+            {
+                rightAxis = _player.PlayerTransform.right;
+            }
+
+            Quaternion lookOffset = Quaternion.AngleAxis(_ledgeCameraLookDownAngle * lookDownBlend, rightAxis);
+            Vector3 targetLookDirection = lookOffset * horizontalForward;
+            float cameraLerpT = 1f - Mathf.Exp(-10f * Time.deltaTime);
+            _player.LerpCameraTowardWorldDirection(targetLookDirection, cameraLerpT);
+        }
+
+        private float GetNormalizedSequenceTime()
+        {
+            _timer += Time.deltaTime;
+            float duration = Mathf.Max(0.01f, _ledgeClimbDuration);
+            return Mathf.Clamp01(_timer / duration);
+        }
+
+        private void ApplySequencePosition(float normalizedTime)
+        {
+            float easedTime = Mathf.SmoothStep(0f, 1f, normalizedTime);
+            _player.PlayerTransform.position = Vector3.Lerp(_startPosition, _targetPosition, easedTime);
+        }
+
+        private void ApplySequenceRotation(float normalizedTime)
+        {
+            if (normalizedTime < RotationBlendStart)
+            {
+                _player.PlayerTransform.rotation = _startRotation;
+                ApplyModelRotation(_startModelRotation);
+                return;
+            }
+
+            float blendProgress = Mathf.InverseLerp(RotationBlendStart, 1f, normalizedTime);
+            float easedBlendProgress = Mathf.SmoothStep(0f, 1f, blendProgress);
+            _player.PlayerTransform.rotation = Quaternion.Slerp(_startRotation, _targetRotation, easedBlendProgress);
+            ApplyModelRotation(Quaternion.Slerp(_startModelRotation, _targetModelRotation, easedBlendProgress));
+        }
+
+        private void FinishSequenceIfComplete(float normalizedTime)
+        {
+            if (normalizedTime < 1f)
+            {
+                return;
+            }
+
+            _player.PlayerTransform.position = _targetPosition;
+            ApplyModelRotation(_targetModelRotation);
+            _player.AlignRootToCameraYaw();
+            _player.ResetClimbCamera();
+            _locomotionState.ForceGroundedRecovery();
+            _player.SetState(Player.PlayerStateType.Locomotion);
+        }
+
+        private bool TryGetHorizontalSequenceForward(out Vector3 horizontalForward)
+        {
+            horizontalForward = Vector3.zero;
+
+            if (_player.ModelTransform != null)
+            {
+                horizontalForward = Vector3.ProjectOnPlane(_player.ModelTransform.forward, Vector3.up);
+            }
+
             if (horizontalForward.sqrMagnitude <= 0.0001f)
             {
                 horizontalForward = Vector3.ProjectOnPlane(_player.PlayerTransform.forward, Vector3.up);
@@ -118,11 +165,15 @@ namespace ProjectPrecipicePT
 
             if (horizontalForward.sqrMagnitude <= 0.0001f)
             {
-                return;
+                return false;
             }
 
             horizontalForward.Normalize();
+            return true;
+        }
 
+        private float GetLookDownBlend(float normalizedTime)
+        {
             float alignDuration = Mathf.Clamp(_ledgeCameraAlignDuration, 0.01f, 0.45f);
             float lookUpStart = Mathf.Clamp(_ledgeCameraLookUpStart, alignDuration + 0.05f, 0.95f);
 
@@ -140,18 +191,7 @@ namespace ProjectPrecipicePT
                 lookDownBlend = 1f - Mathf.InverseLerp(lookUpStart, 1f, normalizedTime);
             }
 
-            lookDownBlend = Mathf.SmoothStep(0f, 1f, lookDownBlend);
-
-            Vector3 rightAxis = Vector3.Cross(Vector3.up, horizontalForward).normalized;
-            if (rightAxis.sqrMagnitude <= 0.0001f)
-            {
-                rightAxis = _player.PlayerTransform.right;
-            }
-
-            Quaternion lookOffset = Quaternion.AngleAxis(_ledgeCameraLookDownAngle * lookDownBlend, rightAxis);
-            Vector3 targetLookDirection = lookOffset * horizontalForward;
-            float cameraLerpT = 1f - Mathf.Exp(-10f * Time.deltaTime);
-            _player.LerpCameraTowardWorldDirection(targetLookDirection, cameraLerpT);
+            return Mathf.SmoothStep(0f, 1f, lookDownBlend);
         }
 
         private void ApplyModelRotation(Quaternion rotation)
@@ -166,24 +206,12 @@ namespace ProjectPrecipicePT
 
         private Quaternion GetTargetUprightRotation()
         {
-            Vector3 desiredForward = Vector3.zero;
-
-            if (_player.ModelTransform != null)
-            {
-                desiredForward = Vector3.ProjectOnPlane(_player.ModelTransform.forward, Vector3.up);
-            }
-
-            if (desiredForward.sqrMagnitude <= 0.0001f)
-            {
-                desiredForward = Vector3.ProjectOnPlane(_player.PlayerTransform.forward, Vector3.up);
-            }
-
-            if (desiredForward.sqrMagnitude <= 0.0001f)
+            if (!TryGetHorizontalSequenceForward(out Vector3 desiredForward))
             {
                 desiredForward = Vector3.forward;
             }
 
-            return Quaternion.LookRotation(desiredForward.normalized, Vector3.up);
+            return Quaternion.LookRotation(desiredForward, Vector3.up);
         }
     }
 }

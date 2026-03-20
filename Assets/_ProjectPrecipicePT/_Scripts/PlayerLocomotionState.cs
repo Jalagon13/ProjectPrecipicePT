@@ -4,6 +4,8 @@ namespace ProjectPrecipicePT
 {
     public class PlayerLocomotionState : MonoBehaviour
     {
+        private const float MovementThresholdSqr = 0.0001f;
+
         [Header("Movement")]
         [SerializeField, Tooltip("Base movement speed while walking on the ground.")]
         private float _walkSpeed = 4.5f;
@@ -41,49 +43,30 @@ namespace ProjectPrecipicePT
         public float MaxLookPitch => _maxLookPitch;
         public float VerticalVelocity => _verticalVelocity;
         public float TerminalVelocity => _terminalVelocity;
+
         private void Awake()
         {
             _player = GetComponent<Player>();
         }
 
+        // Normal movement update:
+        // 1. read move input
+        // 2. update vertical velocity (grounding / jump / gravity)
+        // 3. move the controller
         public void Tick()
         {
             Vector2 moveInput = GameInput.Instance.GetMovementVector();
             bool isGrounded = _player.CharacterController.isGrounded;
+            Vector3 moveDirection = GetMoveDirection(moveInput);
 
-            Vector3 moveDirection = (_player.PlayerTransform.right * moveInput.x) + (_player.PlayerTransform.forward * moveInput.y);
-            if (moveDirection.sqrMagnitude > 1f)
-            {
-                moveDirection.Normalize();
-            }
+            UpdateVerticalVelocity(isGrounded);
 
-            if (isGrounded)
-            {
-                if (_verticalVelocity < 0f)
-                {
-                    _verticalVelocity = -_stickToGroundForce;
-                }
-
-                if (GameInput.Instance.IsJumpPressedThisFrame() && Time.time >= _nextJumpTime)
-                {
-                    _verticalVelocity = Mathf.Sqrt(_jumpHeight * 2f * _gravity);
-                    _nextJumpTime = Time.time + _jumpCooldown;
-                }
-            }
-            else
-            {
-                _verticalVelocity = Mathf.Max(_verticalVelocity - (_gravity * Time.deltaTime), -_terminalVelocity);
-            }
-
-            float moveSpeed = GameInput.Instance.IsSprintPressed() && moveInput.sqrMagnitude > 0.0001f
-                ? _sprintSpeed
-                : _walkSpeed;
-
+            float moveSpeed = GetMoveSpeed(moveInput);
             float movementMultiplier = isGrounded ? 1f : _airMoveMultiplier;
             Vector3 horizontalVelocity = moveDirection * (moveSpeed * movementMultiplier);
-            Vector3 velocity = horizontalVelocity + (Vector3.up * _verticalVelocity);
+            Vector3 totalVelocity = horizontalVelocity + (Vector3.up * _verticalVelocity);
 
-            _player.CharacterController.Move(velocity * Time.deltaTime);
+            _player.CharacterController.Move(totalVelocity * Time.deltaTime);
         }
 
         public void ResetVerticalVelocity()
@@ -94,6 +77,62 @@ namespace ProjectPrecipicePT
         public void ForceGroundedRecovery()
         {
             _verticalVelocity = -_stickToGroundForce;
+        }
+
+        private Vector3 GetMoveDirection(Vector2 moveInput)
+        {
+            Vector3 moveDirection = (_player.PlayerTransform.right * moveInput.x) + (_player.PlayerTransform.forward * moveInput.y);
+            if (moveDirection.sqrMagnitude > 1f)
+            {
+                moveDirection.Normalize();
+            }
+
+            return moveDirection;
+        }
+
+        private void UpdateVerticalVelocity(bool isGrounded)
+        {
+            if (isGrounded)
+            {
+                ApplyGroundedVerticalVelocity();
+                return;
+            }
+
+            ApplyAirborneGravity();
+        }
+
+        private void ApplyGroundedVerticalVelocity()
+        {
+            if (_verticalVelocity < 0f)
+            {
+                _verticalVelocity = -_stickToGroundForce;
+            }
+
+            if (!CanStartJump())
+            {
+                return;
+            }
+
+            _verticalVelocity = Mathf.Sqrt(_jumpHeight * 2f * _gravity);
+            _nextJumpTime = Time.time + _jumpCooldown;
+        }
+
+        private void ApplyAirborneGravity()
+        {
+            _verticalVelocity = Mathf.Max(_verticalVelocity - (_gravity * Time.deltaTime), -_terminalVelocity);
+        }
+
+        private bool CanStartJump()
+        {
+            return GameInput.Instance.IsJumpPressedThisFrame() && Time.time >= _nextJumpTime;
+        }
+
+        private float GetMoveSpeed(Vector2 moveInput)
+        {
+            bool isTryingToMove = moveInput.sqrMagnitude > MovementThresholdSqr;
+            return GameInput.Instance.IsSprintPressed() && isTryingToMove
+                ? _sprintSpeed
+                : _walkSpeed;
         }
     }
 }

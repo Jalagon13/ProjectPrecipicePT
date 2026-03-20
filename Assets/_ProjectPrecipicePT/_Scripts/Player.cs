@@ -8,6 +8,8 @@ namespace ProjectPrecipicePT
     [RequireComponent(typeof(PlayerLedgeClimbState))]
     public class Player : MonoBehaviour
     {
+        private const float MinimumDirectionSqrMagnitude = 0.0001f;
+
         public enum PlayerStateType
         {
             Locomotion,
@@ -41,33 +43,19 @@ namespace ProjectPrecipicePT
 
         private void Awake()
         {
-            _characterController = GetComponent<CharacterController>();
-            _locomotionState = GetComponent<PlayerLocomotionState>();
-            _climbingState = GetComponent<PlayerClimbingState>();
-            _ledgeClimbState = GetComponent<PlayerLedgeClimbState>();
-            _modelTransform = transform.Find("Model");
-
+            CacheReferences();
             SetupCameraHierarchy();
-
-            if (_cameraTransform != null)
-            {
-                _pitch = NormalizePitch(_cameraTransform.localEulerAngles.x);
-            }
+            InitializePitchFromCamera();
         }
 
         private void OnEnable()
         {
-            Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible = false;
+            SetCursorLocked(true);
         }
 
         private void OnDisable()
         {
-            if (Cursor.lockState == CursorLockMode.Locked)
-            {
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
-            }
+            SetCursorLocked(false);
         }
 
         private void Update()
@@ -77,28 +65,9 @@ namespace ProjectPrecipicePT
                 return;
             }
 
-            if (_state != PlayerStateType.LedgeClimb)
-            {
-                HandleLook();
-            }
-
+            HandleLookIfAllowed();
             TickModelUprightBlend();
-
-            switch (_state)
-            {
-                case PlayerStateType.Locomotion:
-                    if (!_climbingState.TryEnterFromInput())
-                    {
-                        _locomotionState.Tick();
-                    }
-                    break;
-                case PlayerStateType.Climbing:
-                    _climbingState.Tick();
-                    break;
-                case PlayerStateType.LedgeClimb:
-                    _ledgeClimbState.Tick();
-                    break;
-            }
+            TickCurrentState();
         }
 
         public void SetState(PlayerStateType state)
@@ -116,9 +85,10 @@ namespace ProjectPrecipicePT
             }
         }
 
+        // Used by ledge climb to steer the player's view through the mantle sequence.
         public void LerpCameraTowardWorldDirection(Vector3 worldDirection, float t)
         {
-            if (_cameraTransform == null || _cameraYawPivot == null || worldDirection.sqrMagnitude <= 0.0001f)
+            if (_cameraTransform == null || _cameraYawPivot == null || worldDirection.sqrMagnitude <= MinimumDirectionSqrMagnitude)
             {
                 return;
             }
@@ -131,9 +101,7 @@ namespace ProjectPrecipicePT
 
             _climbCameraYaw = Mathf.LerpAngle(_climbCameraYaw, targetYaw, t);
             _pitch = Mathf.LerpAngle(_pitch, targetPitch, t);
-
-            _cameraYawPivot.localRotation = Quaternion.Euler(0f, _climbCameraYaw, 0f);
-            _cameraTransform.localRotation = Quaternion.Euler(_pitch, 0f, 0f);
+            ApplyCameraLocalRotation();
         }
 
         public void AlignRootToCameraYaw()
@@ -143,59 +111,28 @@ namespace ProjectPrecipicePT
                 return;
             }
 
-            Vector3 desiredForward = Vector3.ProjectOnPlane(_cameraTransform.forward, Vector3.up);
-            if (desiredForward.sqrMagnitude <= 0.0001f)
-            {
-                desiredForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
-            }
-
-            if (desiredForward.sqrMagnitude > 0.0001f)
-            {
-                transform.rotation = Quaternion.LookRotation(desiredForward.normalized, Vector3.up);
-            }
+            RotateRootToHorizontalDirection(_cameraTransform.forward);
         }
 
         public void SnapDetachFacingToCurrentLook()
         {
-            Vector3 desiredForward = Vector3.zero;
-
             if (_cameraYawPivot != null)
             {
-                desiredForward = Vector3.ProjectOnPlane(_cameraYawPivot.forward, Vector3.up);
+                RotateRootToHorizontalDirection(_cameraYawPivot.forward);
             }
-
-            if (desiredForward.sqrMagnitude <= 0.0001f && _cameraTransform != null)
+            else if (_cameraTransform != null)
             {
-                desiredForward = Vector3.ProjectOnPlane(_cameraTransform.forward, Vector3.up);
+                RotateRootToHorizontalDirection(_cameraTransform.forward);
             }
 
-            if (desiredForward.sqrMagnitude <= 0.0001f)
-            {
-                desiredForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
-            }
-
-            if (desiredForward.sqrMagnitude > 0.0001f)
-            {
-                transform.rotation = Quaternion.LookRotation(desiredForward.normalized, Vector3.up);
-            }
-
-            _climbCameraYaw = 0f;
-
-            if (_cameraYawPivot != null)
-            {
-                _cameraYawPivot.localRotation = Quaternion.identity;
-            }
-
-            if (_cameraTransform != null)
-            {
-                _cameraTransform.localRotation = Quaternion.Euler(_pitch, 0f, 0f);
-            }
+            ResetClimbCamera();
+            ApplyCameraLocalRotation();
         }
 
         public void ApplyClimbFacing(Vector3 surfaceNormal, float rotationLerpSpeed, bool instant)
         {
             Vector3 flatForward = Vector3.ProjectOnPlane(-surfaceNormal, Vector3.up);
-            if (flatForward.sqrMagnitude > 0.0001f)
+            if (flatForward.sqrMagnitude > MinimumDirectionSqrMagnitude)
             {
                 Quaternion targetRootRotation = Quaternion.LookRotation(flatForward.normalized, Vector3.up);
                 transform.rotation = instant
@@ -259,6 +196,36 @@ namespace ProjectPrecipicePT
             return !Physics.CheckCapsule(top, bottom, castRadius, ~0, QueryTriggerInteraction.Ignore);
         }
 
+        private void CacheReferences()
+        {
+            _characterController = GetComponent<CharacterController>();
+            _locomotionState = GetComponent<PlayerLocomotionState>();
+            _climbingState = GetComponent<PlayerClimbingState>();
+            _ledgeClimbState = GetComponent<PlayerLedgeClimbState>();
+            _modelTransform = transform.Find("Model");
+        }
+
+        private void InitializePitchFromCamera()
+        {
+            if (_cameraTransform == null)
+            {
+                return;
+            }
+
+            _pitch = NormalizePitch(_cameraTransform.localEulerAngles.x);
+        }
+
+        private void SetCursorLocked(bool isLocked)
+        {
+            if (!isLocked && Cursor.lockState != CursorLockMode.Locked)
+            {
+                return;
+            }
+
+            Cursor.lockState = isLocked ? CursorLockMode.Locked : CursorLockMode.None;
+            Cursor.visible = !isLocked;
+        }
+
         private void SetupCameraHierarchy()
         {
             _cameraTransform = GetComponentInChildren<Camera>()?.transform;
@@ -285,6 +252,40 @@ namespace ProjectPrecipicePT
             }
         }
 
+        private void HandleLookIfAllowed()
+        {
+            if (_state == PlayerStateType.LedgeClimb)
+            {
+                return;
+            }
+
+            HandleLook();
+        }
+
+        private void TickCurrentState()
+        {
+            switch (_state)
+            {
+                case PlayerStateType.Locomotion:
+                    TickLocomotionState();
+                    break;
+                case PlayerStateType.Climbing:
+                    _climbingState.Tick();
+                    break;
+                case PlayerStateType.LedgeClimb:
+                    _ledgeClimbState.Tick();
+                    break;
+            }
+        }
+
+        private void TickLocomotionState()
+        {
+            if (!_climbingState.TryEnterFromInput())
+            {
+                _locomotionState.Tick();
+            }
+        }
+
         private void HandleLook()
         {
             if (_cameraTransform == null || _cameraYawPivot == null)
@@ -296,25 +297,11 @@ namespace ProjectPrecipicePT
 
             if (_state == PlayerStateType.Climbing)
             {
-                _climbCameraYaw = Mathf.Clamp(
-                    _climbCameraYaw + (lookInput.x * _locomotionState.LookSensitivityX),
-                    -_climbingState.ClimbCameraYawLimit,
-                    _climbingState.ClimbCameraYawLimit);
-
-                _pitch = Mathf.Clamp(
-                    _pitch - (lookInput.y * _locomotionState.LookSensitivityY),
-                    -_climbingState.ClimbCameraPitchUpLimit,
-                    _climbingState.ClimbCameraPitchDownLimit);
-
-                _cameraYawPivot.localRotation = Quaternion.Euler(0f, _climbCameraYaw, 0f);
-                _cameraTransform.localRotation = Quaternion.Euler(_pitch, 0f, 0f);
+                HandleClimbLook(lookInput);
                 return;
             }
 
-            transform.Rotate(Vector3.up, lookInput.x * _locomotionState.LookSensitivityX);
-            ResetClimbCamera();
-            _pitch = Mathf.Clamp(_pitch - (lookInput.y * _locomotionState.LookSensitivityY), -_locomotionState.MaxLookPitch, _locomotionState.MaxLookPitch);
-            _cameraTransform.localRotation = Quaternion.Euler(_pitch, 0f, 0f);
+            HandleLocomotionLook(lookInput);
         }
 
         private void TickModelUprightBlend()
@@ -333,6 +320,59 @@ namespace ProjectPrecipicePT
             {
                 _isModelUprightBlendActive = false;
                 _modelTransform.localRotation = Quaternion.identity;
+            }
+        }
+
+        private void HandleClimbLook(Vector2 lookInput)
+        {
+            _climbCameraYaw = Mathf.Clamp(
+                _climbCameraYaw + (lookInput.x * _locomotionState.LookSensitivityX),
+                -_climbingState.ClimbCameraYawLimit,
+                _climbingState.ClimbCameraYawLimit);
+
+            _pitch = Mathf.Clamp(
+                _pitch - (lookInput.y * _locomotionState.LookSensitivityY),
+                -_climbingState.ClimbCameraPitchUpLimit,
+                _climbingState.ClimbCameraPitchDownLimit);
+
+            ApplyCameraLocalRotation();
+        }
+
+        private void HandleLocomotionLook(Vector2 lookInput)
+        {
+            transform.Rotate(Vector3.up, lookInput.x * _locomotionState.LookSensitivityX);
+            ResetClimbCamera();
+            _pitch = Mathf.Clamp(
+                _pitch - (lookInput.y * _locomotionState.LookSensitivityY),
+                -_locomotionState.MaxLookPitch,
+                _locomotionState.MaxLookPitch);
+            ApplyCameraLocalRotation();
+        }
+
+        private void ApplyCameraLocalRotation()
+        {
+            if (_cameraYawPivot != null)
+            {
+                _cameraYawPivot.localRotation = Quaternion.Euler(0f, _climbCameraYaw, 0f);
+            }
+
+            if (_cameraTransform != null)
+            {
+                _cameraTransform.localRotation = Quaternion.Euler(_pitch, 0f, 0f);
+            }
+        }
+
+        private void RotateRootToHorizontalDirection(Vector3 sourceDirection)
+        {
+            Vector3 desiredForward = Vector3.ProjectOnPlane(sourceDirection, Vector3.up);
+            if (desiredForward.sqrMagnitude <= MinimumDirectionSqrMagnitude)
+            {
+                desiredForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+            }
+
+            if (desiredForward.sqrMagnitude > MinimumDirectionSqrMagnitude)
+            {
+                transform.rotation = Quaternion.LookRotation(desiredForward.normalized, Vector3.up);
             }
         }
 

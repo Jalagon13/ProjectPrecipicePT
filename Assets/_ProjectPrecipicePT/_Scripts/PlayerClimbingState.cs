@@ -4,6 +4,8 @@ namespace ProjectPrecipicePT
 {
     public class PlayerClimbingState : MonoBehaviour
     {
+        private const float InputThreshold = 0.01f;
+
         private struct ClimbSurfaceSample
         {
             public Vector3 AverageNormal;
@@ -77,6 +79,18 @@ namespace ProjectPrecipicePT
         private float _climbCameraPitchDownLimit = 80f;
 
         private static readonly Vector2 DiagonalUnit = new Vector2(0.70710677f, 0.70710677f);
+        private static readonly Vector2[] ProbeOffsets =
+        {
+            Vector2.zero,
+            Vector2.up,
+            Vector2.down,
+            Vector2.left,
+            Vector2.right,
+            new Vector2(-DiagonalUnit.x, DiagonalUnit.y),
+            new Vector2(DiagonalUnit.x, DiagonalUnit.y),
+            new Vector2(-DiagonalUnit.x, -DiagonalUnit.y),
+            new Vector2(DiagonalUnit.x, -DiagonalUnit.y)
+        };
 
         private Player _player;
         private PlayerLocomotionState _locomotionState;
@@ -102,6 +116,8 @@ namespace ProjectPrecipicePT
             _ledgeClimbState = GetComponent<PlayerLedgeClimbState>();
         }
 
+        // Entry from locomotion. If a nearby wall passes all checks, this
+        // starts the attach sequence and the player transitions into climbing.
         public bool TryEnterFromInput()
         {
             if (!GameInput.Instance.IsClimbingPressed())
@@ -109,72 +125,111 @@ namespace ProjectPrecipicePT
                 return false;
             }
 
-            Vector3 searchDirection = _player.CameraTransform != null ? _player.CameraTransform.forward : _player.PlayerTransform.forward;
-            if (searchDirection.sqrMagnitude <= 0.0001f)
-            {
-                searchDirection = _player.PlayerTransform.forward;
-            }
-
-            if (!TryGetClosestClimbHit(_player.GetBodyCenter(_player.PlayerTransform.position), searchDirection.normalized, _climbAttachRange, out RaycastHit hit))
+            Vector3 searchDirection = GetAttachSearchDirection();
+            if (!TryGetClosestClimbHit(_player.GetBodyCenter(_player.PlayerTransform.position), searchDirection, _climbAttachRange, out RaycastHit hit))
             {
                 return false;
             }
 
+            if (!CanAttachToSurface(hit, searchDirection))
+            {
+                return false;
+            }
+
+            BeginClimbAttach(hit);
+            return true;
+        }
+
+        // Active climb update:
+        // 1. release handling
+        // 2. attach sequence
+        // 3. current wall sample
+        // 4. movement across that wall
+        public void Tick()
+        {
+            if (TryExitWhenClimbReleased())
+            {
+                return;
+            }
+
+            if (TickAttachIfNeeded())
+            {
+                return;
+            }
+
+            Vector2 moveInput = GameInput.Instance.GetMovementVector();
+            if (!TryResolveCurrentSurface(moveInput, out ClimbSurfaceSample currentSample))
+            {
+                return;
+            }
+
+            ApplySample(currentSample);
+            TryMoveAlongSurface(moveInput, currentSample);
+        }
+
+        private Vector3 GetAttachSearchDirection()
+        {
+            Vector3 searchDirection = _player.CameraTransform != null ? _player.CameraTransform.forward : _player.PlayerTransform.forward;
+            return searchDirection.sqrMagnitude > 0.0001f ? searchDirection.normalized : _player.PlayerTransform.forward;
+        }
+
+        private bool CanAttachToSurface(RaycastHit hit, Vector3 searchDirection)
+        {
             if (!IsSurfaceClimbable(hit.normal))
             {
                 return false;
             }
 
-            float facingAngle = Vector3.Angle(searchDirection.normalized, -hit.normal);
-            if (facingAngle > _climbAttachMaxFacingAngle)
+            return Vector3.Angle(searchDirection, -hit.normal) <= _climbAttachMaxFacingAngle;
+        }
+
+        private bool TryExitWhenClimbReleased()
+        {
+            if (GameInput.Instance.IsClimbingPressed())
             {
                 return false;
             }
 
-            BeginClimbing(hit);
+            ExitClimbing();
             return true;
         }
 
-        public void Tick()
+        private bool TickAttachIfNeeded()
         {
-            if (!GameInput.Instance.IsClimbingPressed())
+            if (!_isAttaching)
+            {
+                return false;
+            }
+
+            TickAttach();
+            return true;
+        }
+
+        private bool TryResolveCurrentSurface(Vector2 moveInput, out ClimbSurfaceSample currentSample)
+        {
+            if (TrySampleSurface(_player.PlayerTransform.position, out currentSample))
+            {
+                return true;
+            }
+
+            if (!TryBeginLedgeClimbFromInput(moveInput))
             {
                 ExitClimbing();
-                return;
             }
 
-            if (_isAttaching)
-            {
-                TickAttach();
-                return;
-            }
+            return false;
+        }
 
-            Vector2 moveInput = GameInput.Instance.GetMovementVector();
-            if (!TrySampleSurface(_player.PlayerTransform.position, out ClimbSurfaceSample currentSample))
-            {
-                if (moveInput.y > 0.01f && TryBeginLedgeClimb())
-                {
-                    return;
-                }
-
-                ExitClimbing();
-                return;
-            }
-
-            ApplySample(currentSample);
-
-            if (moveInput.sqrMagnitude <= 0.0001f)
+        private void TryMoveAlongSurface(Vector2 moveInput, ClimbSurfaceSample currentSample)
+        {
+            if (!HasMoveInput(moveInput))
             {
                 return;
             }
 
             if (!HasMovementSupport(currentSample, moveInput))
             {
-                if (moveInput.y > 0.01f)
-                {
-                    TryBeginLedgeClimb();
-                }
-
+                TryBeginLedgeClimbFromInput(moveInput);
                 return;
             }
 
@@ -182,33 +237,47 @@ namespace ProjectPrecipicePT
             Vector3 wallRight = Vector3.Cross(_currentClimbNormal, wallUp).normalized;
             Vector3 climbDelta = ((wallRight * moveInput.x) + (wallUp * moveInput.y)).normalized * (_climbMoveSpeed * Time.deltaTime);
 
-            if (Mathf.Abs(moveInput.y) > 0.01f &&
-                IsVerticalMovementBlocked(wallUp * Mathf.Sign(moveInput.y), climbDelta.magnitude, moveInput.y > 0f ? _maxUpwardSurfaceTransitionAngle : _maxDownwardSurfaceTransitionAngle))
+            if (IsVerticalMovementBlockedForInput(moveInput, wallUp, climbDelta.magnitude))
             {
-                if (moveInput.y > 0.01f)
-                {
-                    TryBeginLedgeClimb();
-                }
-
+                TryBeginLedgeClimbFromInput(moveInput);
                 return;
             }
 
             Vector3 candidatePosition = _player.PlayerTransform.position + climbDelta;
-
             if (!TrySampleSurface(candidatePosition, out ClimbSurfaceSample candidateSample))
             {
-                if (moveInput.y > 0.01f)
-                {
-                    TryBeginLedgeClimb();
-                }
-
+                TryBeginLedgeClimbFromInput(moveInput);
                 return;
             }
 
             ApplySample(candidateSample);
         }
 
-        private void BeginClimbing(RaycastHit hit)
+        private bool HasMoveInput(Vector2 moveInput)
+        {
+            return moveInput.sqrMagnitude > InputThreshold * InputThreshold;
+        }
+
+        private bool TryBeginLedgeClimbFromInput(Vector2 moveInput)
+        {
+            return moveInput.y > InputThreshold && TryBeginLedgeClimb();
+        }
+
+        private bool IsVerticalMovementBlockedForInput(Vector2 moveInput, Vector3 wallUp, float moveDistance)
+        {
+            if (Mathf.Abs(moveInput.y) <= InputThreshold)
+            {
+                return false;
+            }
+
+            float allowedContinuationAngle = moveInput.y > 0f
+                ? _maxUpwardSurfaceTransitionAngle
+                : _maxDownwardSurfaceTransitionAngle;
+
+            return IsVerticalMovementBlocked(wallUp * Mathf.Sign(moveInput.y), moveDistance, allowedContinuationAngle);
+        }
+
+        private void BeginClimbAttach(RaycastHit hit)
         {
             float fallSpeed = Mathf.Max(0f, -_locomotionState.VerticalVelocity);
             bool shouldSlideOnGrab = !_player.CharacterController.isGrounded && fallSpeed > 0.01f;
@@ -272,6 +341,8 @@ namespace ProjectPrecipicePT
             _isAttaching = false;
         }
 
+        // The center ray keeps the player anchored to the wall.
+        // The eight outer rays tell us which directions still have climb support.
         private bool TrySampleSurface(Vector3 rootPosition, out ClimbSurfaceSample sample)
         {
             Vector3 bodyCenter = _player.GetBodyCenter(rootPosition);
@@ -290,31 +361,11 @@ namespace ProjectPrecipicePT
             float pointWeightSum = 0f;
             bool hasCenterHit = false;
             Vector3 centerPoint = Vector3.zero;
-            bool upHit = false;
-            bool downHit = false;
-            bool leftHit = false;
-            bool rightHit = false;
-            bool upLeftHit = false;
-            bool upRightHit = false;
-            bool downLeftHit = false;
-            bool downRightHit = false;
+            bool[] supportHits = new bool[ProbeOffsets.Length];
 
-            Vector2[] offsets =
+            for (int i = 0; i < ProbeOffsets.Length; i++)
             {
-                Vector2.zero,
-                Vector2.up,
-                Vector2.down,
-                Vector2.left,
-                Vector2.right,
-                new Vector2(-DiagonalUnit.x, DiagonalUnit.y),
-                new Vector2(DiagonalUnit.x, DiagonalUnit.y),
-                new Vector2(-DiagonalUnit.x, -DiagonalUnit.y),
-                new Vector2(DiagonalUnit.x, -DiagonalUnit.y)
-            };
-
-            for (int i = 0; i < offsets.Length; i++)
-            {
-                Vector2 offset = offsets[i];
+                Vector2 offset = ProbeOffsets[i];
                 Vector3 rayDirection = (centerDirection + (wallRight * offset.x * tangent) + (wallUp * offset.y * tangent)).normalized;
                 Vector3 rayOrigin = bodyCenter + (rayDirection * _surfaceProbeStartOffset);
 
@@ -343,37 +394,12 @@ namespace ProjectPrecipicePT
                 normalSum += hit.normal;
                 pointSum += hit.point * pointWeight;
                 pointWeightSum += pointWeight;
+                supportHits[i] = true;
 
-                switch (i)
+                if (i == 0)
                 {
-                    case 0:
-                        hasCenterHit = true;
-                        centerPoint = hit.point;
-                        break;
-                    case 1:
-                        upHit = true;
-                        break;
-                    case 2:
-                        downHit = true;
-                        break;
-                    case 3:
-                        leftHit = true;
-                        break;
-                    case 4:
-                        rightHit = true;
-                        break;
-                    case 5:
-                        upLeftHit = true;
-                        break;
-                    case 6:
-                        upRightHit = true;
-                        break;
-                    case 7:
-                        downLeftHit = true;
-                        break;
-                    case 8:
-                        downRightHit = true;
-                        break;
+                    hasCenterHit = true;
+                    centerPoint = hit.point;
                 }
             }
 
@@ -389,14 +415,14 @@ namespace ProjectPrecipicePT
                 AnchorPoint = hasCenterHit
                     ? centerPoint
                     : (pointWeightSum > 0f ? pointSum / pointWeightSum : bodyCenter + (centerDirection * _surfaceProbeDistance)),
-                UpHit = upHit,
-                DownHit = downHit,
-                LeftHit = leftHit,
-                RightHit = rightHit,
-                UpLeftHit = upLeftHit,
-                UpRightHit = upRightHit,
-                DownLeftHit = downLeftHit,
-                DownRightHit = downRightHit
+                UpHit = supportHits[1],
+                DownHit = supportHits[2],
+                LeftHit = supportHits[3],
+                RightHit = supportHits[4],
+                UpLeftHit = supportHits[5],
+                UpRightHit = supportHits[6],
+                DownLeftHit = supportHits[7],
+                DownRightHit = supportHits[8]
             };
             return true;
         }
@@ -430,10 +456,10 @@ namespace ProjectPrecipicePT
 
         private bool HasMovementSupport(ClimbSurfaceSample sample, Vector2 moveInput)
         {
-            bool movingUp = moveInput.y > 0.01f;
-            bool movingDown = moveInput.y < -0.01f;
-            bool movingLeft = moveInput.x < -0.01f;
-            bool movingRight = moveInput.x > 0.01f;
+            bool movingUp = moveInput.y > InputThreshold;
+            bool movingDown = moveInput.y < -InputThreshold;
+            bool movingLeft = moveInput.x < -InputThreshold;
+            bool movingRight = moveInput.x > InputThreshold;
 
             if (movingUp && !sample.UpHit)
             {
@@ -630,28 +656,15 @@ namespace ProjectPrecipicePT
 
         private bool TryGetClosestClimbHit(Vector3 origin, Vector3 direction, float maxDistance, out RaycastHit closestHit)
         {
-            RaycastHit[] hits = Physics.RaycastAll(origin, direction, maxDistance, _climbableLayers, QueryTriggerInteraction.Ignore);
-            float closestDistance = float.MaxValue;
-            closestHit = default;
-
-            for (int i = 0; i < hits.Length; i++)
-            {
-                if (!IsSurfaceClimbable(hits[i].normal))
-                {
-                    continue;
-                }
-
-                if (hits[i].distance < closestDistance)
-                {
-                    closestDistance = hits[i].distance;
-                    closestHit = hits[i];
-                }
-            }
-
-            return closestDistance < float.MaxValue;
+            return TryGetClosestHit(origin, direction, maxDistance, requireClimbableSurface: true, out closestHit);
         }
 
         private bool TryGetClosestSurfaceHit(Vector3 origin, Vector3 direction, float maxDistance, out RaycastHit closestHit)
+        {
+            return TryGetClosestHit(origin, direction, maxDistance, requireClimbableSurface: false, out closestHit);
+        }
+
+        private bool TryGetClosestHit(Vector3 origin, Vector3 direction, float maxDistance, bool requireClimbableSurface, out RaycastHit closestHit)
         {
             RaycastHit[] hits = Physics.RaycastAll(origin, direction, maxDistance, _climbableLayers, QueryTriggerInteraction.Ignore);
             float closestDistance = float.MaxValue;
@@ -659,6 +672,11 @@ namespace ProjectPrecipicePT
 
             for (int i = 0; i < hits.Length; i++)
             {
+                if (requireClimbableSurface && !IsSurfaceClimbable(hits[i].normal))
+                {
+                    continue;
+                }
+
                 if (hits[i].distance < closestDistance)
                 {
                     closestDistance = hits[i].distance;
