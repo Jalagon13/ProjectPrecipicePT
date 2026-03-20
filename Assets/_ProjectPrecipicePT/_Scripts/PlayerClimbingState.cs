@@ -5,6 +5,7 @@ namespace ProjectPrecipicePT
     public class PlayerClimbingState : MonoBehaviour
     {
         private const float InputThreshold = 0.01f;
+        private const float ClimbJumpStepDistance = 0.2f;
 
         private struct ClimbSurfaceSample
         {
@@ -105,6 +106,7 @@ namespace ProjectPrecipicePT
         private bool _attachIncludesSlide;
 
         public LayerMask ClimbableLayers => _climbableLayers;
+        public float ClimbMoveSpeed => _climbMoveSpeed;
         public float ClimbCameraYawLimit => _climbCameraYawLimit;
         public float ClimbCameraPitchUpLimit => _climbCameraPitchUpLimit;
         public float ClimbCameraPitchDownLimit => _climbCameraPitchDownLimit;
@@ -164,6 +166,12 @@ namespace ProjectPrecipicePT
             }
 
             ApplySample(currentSample);
+
+            if (TryBeginClimbJump(moveInput))
+            {
+                return;
+            }
+
             TryMoveAlongSurface(moveInput, currentSample);
         }
 
@@ -258,6 +266,46 @@ namespace ProjectPrecipicePT
             return moveInput.sqrMagnitude > InputThreshold * InputThreshold;
         }
 
+        public bool HasClimbMoveInput(Vector2 moveInput)
+        {
+            return HasMoveInput(moveInput);
+        }
+
+        private bool TryBeginClimbJump(Vector2 moveInput)
+        {
+            if (!GameInput.Instance.IsJumpPressedThisFrame() ||
+                !_player.ClimbJumpState.CanBegin() ||
+                !TryGetClimbJumpDirection(moveInput, out Vector3 jumpDirection))
+            {
+                return false;
+            }
+
+            _player.ClimbJumpState.Begin(jumpDirection);
+            return true;
+        }
+
+        public bool TryGetClimbJumpDirection(Vector2 moveInput, out Vector3 jumpDirection)
+        {
+            if (!HasMoveInput(moveInput))
+            {
+                jumpDirection = Vector3.zero;
+                return false;
+            }
+
+            Vector3 wallUp = GetWallUp(_currentClimbNormal);
+            Vector3 wallRight = Vector3.Cross(_currentClimbNormal, wallUp).normalized;
+            jumpDirection = (wallRight * moveInput.x) + (wallUp * moveInput.y);
+
+            if (jumpDirection.sqrMagnitude <= InputThreshold * InputThreshold)
+            {
+                jumpDirection = Vector3.zero;
+                return false;
+            }
+
+            jumpDirection.Normalize();
+            return true;
+        }
+
         private bool TryBeginLedgeClimbFromInput(Vector2 moveInput)
         {
             return moveInput.y > InputThreshold && TryBeginLedgeClimb();
@@ -319,6 +367,11 @@ namespace ProjectPrecipicePT
             _player.SetState(Player.PlayerStateType.Locomotion);
         }
 
+        public void ExitToLocomotion()
+        {
+            ExitClimbing();
+        }
+
         private void TickAttach()
         {
             _attachTimer += Time.deltaTime;
@@ -339,6 +392,106 @@ namespace ProjectPrecipicePT
             _player.PlayerTransform.position = _attachTargetPosition;
             _currentClimbNormal = _attachTargetNormal;
             _isAttaching = false;
+        }
+
+        public bool TryAdvanceClimbJump(Vector3 moveDelta)
+        {
+            return TryAdvanceClimbJumpInSteps(moveDelta);
+        }
+
+        public bool TryResumeAfterClimbJump()
+        {
+            if (!TrySampleSurface(_player.PlayerTransform.position, out ClimbSurfaceSample currentSample))
+            {
+                return false;
+            }
+
+            ApplySample(currentSample);
+            _player.SetState(Player.PlayerStateType.Climbing);
+            return true;
+        }
+
+        public void ContinueFromCurrentInput()
+        {
+            Vector2 moveInput = GameInput.Instance != null ? GameInput.Instance.GetMovementVector() : Vector2.zero;
+            if (!TryResolveCurrentSurface(moveInput, out ClimbSurfaceSample currentSample))
+            {
+                return;
+            }
+
+            ApplySample(currentSample);
+            TryMoveAlongSurface(moveInput, currentSample);
+        }
+
+        // Climb jump uses this path so it inherits the same wall support,
+        // ceiling blocking, side blocking, and ledge climb behavior as normal climbing.
+        private bool TryAdvanceClimbJumpInSteps(Vector3 moveDelta)
+        {
+            if (moveDelta.sqrMagnitude <= InputThreshold * InputThreshold)
+            {
+                return true;
+            }
+
+            float remainingDistance = moveDelta.magnitude;
+            Vector3 moveDirection = moveDelta.normalized;
+
+            while (remainingDistance > 0f)
+            {
+                float stepDistance = Mathf.Min(remainingDistance, ClimbJumpStepDistance);
+                Vector3 stepDelta = moveDirection * stepDistance;
+
+                if (!TryAdvanceClimbJumpStep(stepDelta))
+                {
+                    return false;
+                }
+
+                if (_player.State == Player.PlayerStateType.LedgeClimb)
+                {
+                    return true;
+                }
+
+                remainingDistance -= stepDistance;
+            }
+
+            return true;
+        }
+
+        private bool TryAdvanceClimbJumpStep(Vector3 stepDelta)
+        {
+            if (!TrySampleSurface(_player.PlayerTransform.position, out ClimbSurfaceSample currentSample))
+            {
+                return false;
+            }
+
+            ApplySample(currentSample);
+
+            Vector2 moveInput = GetMoveInputFromClimbDelta(stepDelta);
+            if (!HasMovementSupport(currentSample, moveInput))
+            {
+                return moveInput.y > InputThreshold && TryBeginLedgeClimb();
+            }
+
+            Vector3 wallUp = GetWallUp(_currentClimbNormal);
+            if (IsVerticalMovementBlockedForInput(moveInput, wallUp, stepDelta.magnitude))
+            {
+                return moveInput.y > InputThreshold && TryBeginLedgeClimb();
+            }
+
+            Vector3 candidatePosition = _player.PlayerTransform.position + stepDelta;
+            if (!TrySampleSurface(candidatePosition, out ClimbSurfaceSample candidateSample))
+            {
+                return moveInput.y > InputThreshold && TryBeginLedgeClimb();
+            }
+
+            ApplySample(candidateSample);
+            return true;
+        }
+
+        private Vector2 GetMoveInputFromClimbDelta(Vector3 moveDelta)
+        {
+            Vector3 wallUp = GetWallUp(_currentClimbNormal);
+            Vector3 wallRight = Vector3.Cross(_currentClimbNormal, wallUp).normalized;
+            return new Vector2(Vector3.Dot(moveDelta, wallRight), Vector3.Dot(moveDelta, wallUp));
         }
 
         // The center ray keeps the player anchored to the wall.

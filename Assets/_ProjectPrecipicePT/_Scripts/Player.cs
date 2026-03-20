@@ -5,6 +5,7 @@ namespace ProjectPrecipicePT
     [RequireComponent(typeof(CharacterController))]
     [RequireComponent(typeof(PlayerLocomotionState))]
     [RequireComponent(typeof(PlayerClimbingState))]
+    [RequireComponent(typeof(PlayerClimbJumpState))]
     [RequireComponent(typeof(PlayerLedgeClimbState))]
     public class Player : MonoBehaviour
     {
@@ -14,6 +15,7 @@ namespace ProjectPrecipicePT
         {
             Locomotion,
             Climbing,
+            ClimbJump,
             LedgeClimb
         }
 
@@ -23,6 +25,7 @@ namespace ProjectPrecipicePT
         private Transform _modelTransform;
         private PlayerLocomotionState _locomotionState;
         private PlayerClimbingState _climbingState;
+        private PlayerClimbJumpState _climbJumpState;
         private PlayerLedgeClimbState _ledgeClimbState;
         private PlayerStateType _state;
         private float _pitch;
@@ -39,6 +42,7 @@ namespace ProjectPrecipicePT
         public PlayerStateType State => _state;
         public PlayerLocomotionState LocomotionState => _locomotionState;
         public PlayerClimbingState ClimbingState => _climbingState;
+        public PlayerClimbJumpState ClimbJumpState => _climbJumpState;
         public PlayerLedgeClimbState LedgeClimbState => _ledgeClimbState;
 
         private void Awake()
@@ -201,6 +205,7 @@ namespace ProjectPrecipicePT
             _characterController = GetComponent<CharacterController>();
             _locomotionState = GetComponent<PlayerLocomotionState>();
             _climbingState = GetComponent<PlayerClimbingState>();
+            _climbJumpState = GetComponent<PlayerClimbJumpState>();
             _ledgeClimbState = GetComponent<PlayerLedgeClimbState>();
             _modelTransform = transform.Find("Model");
         }
@@ -272,6 +277,9 @@ namespace ProjectPrecipicePT
                 case PlayerStateType.Climbing:
                     _climbingState.Tick();
                     break;
+                case PlayerStateType.ClimbJump:
+                    _climbJumpState.Tick();
+                    break;
                 case PlayerStateType.LedgeClimb:
                     _ledgeClimbState.Tick();
                     break;
@@ -295,7 +303,7 @@ namespace ProjectPrecipicePT
 
             Vector2 lookInput = GameInput.Instance.GetLookVector();
 
-            if (_state == PlayerStateType.Climbing)
+            if (_state == PlayerStateType.Climbing || _state == PlayerStateType.ClimbJump)
             {
                 HandleClimbLook(lookInput);
                 return;

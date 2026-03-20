@@ -6628,6 +6628,7 @@ GameObject:
   - component: {fileID: 1948954846}
   - component: {fileID: 1948954845}
   - component: {fileID: 1948954844}
+  - component: {fileID: 1948954847}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -6777,6 +6778,22 @@ MonoBehaviour:
   _lookSensitivityX: 0.12
   _lookSensitivityY: 0.12
   _maxLookPitch: 80
+--- !u!114 &1948954847
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1948954840}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4a8e7d4a0ef74b39a5ebbb2c1c79d8ef, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ProjectPrecipicePT.PlayerClimbJumpState
+  _climbJumpDistance: 1.5
+  _climbJumpDuration: 0.4
+  _climbJumpCooldown: 1
+  _climbJumpRecoveryDuration: 0.15
 --- !u!1 &2006269644
 GameObject:
   m_ObjectHideFlags: 0
