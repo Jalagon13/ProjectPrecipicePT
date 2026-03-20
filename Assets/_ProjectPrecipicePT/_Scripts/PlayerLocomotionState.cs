@@ -5,6 +5,7 @@ namespace ProjectPrecipicePT
     public class PlayerLocomotionState : MonoBehaviour
     {
         private const float MovementThresholdSqr = 0.0001f;
+        private const float MinimumDirectionSqrMagnitude = 0.0001f;
 
         [Header("Movement")]
         [SerializeField, Tooltip("Base movement speed while walking on the ground.")]
@@ -25,6 +26,14 @@ namespace ProjectPrecipicePT
         private float _terminalVelocity = 53f;
         [SerializeField, Tooltip("Small downward force used to keep the controller grounded on slopes.")]
         private float _stickToGroundForce = 5f;
+
+        [Header("Slope Sliding")]
+        [SerializeField, Tooltip("Minimum ground angle, relative to up, where slope sliding begins.")]
+        private float _minSlopeSlideAngle = 40f;
+        [SerializeField, Tooltip("Maximum ground angle, relative to up, used when scaling the strongest slope slide.")]
+        private float _maxSlopeSlideAngle = 70f;
+        [SerializeField, Tooltip("Maximum downhill slide speed added while standing on a steep slope within the slide range.")]
+        private float _maxSlopeSlideSpeed = 6f;
 
         [Header("Look")]
         [SerializeField, Tooltip("Horizontal mouse look sensitivity.")]
@@ -64,7 +73,9 @@ namespace ProjectPrecipicePT
             float moveSpeed = GetMoveSpeed(moveInput);
             float movementMultiplier = isGrounded ? 1f : _airMoveMultiplier;
             Vector3 horizontalVelocity = moveDirection * (moveSpeed * movementMultiplier);
+            Vector3 slopeSlideVelocity = GetSlopeSlideVelocity(isGrounded);
             Vector3 totalVelocity = horizontalVelocity + (Vector3.up * _verticalVelocity);
+            totalVelocity += slopeSlideVelocity;
 
             _player.CharacterController.Move(totalVelocity * Time.deltaTime);
         }
@@ -133,6 +144,61 @@ namespace ProjectPrecipicePT
             return GameInput.Instance.IsSprintPressed() && isTryingToMove
                 ? _sprintSpeed
                 : _walkSpeed;
+        }
+
+        private Vector3 GetSlopeSlideVelocity(bool isGrounded)
+        {
+            if (!isGrounded || !TryGetGroundNormal(out Vector3 groundNormal))
+            {
+                return Vector3.zero;
+            }
+
+            float slopeAngle = Vector3.Angle(groundNormal, Vector3.up);
+            if (slopeAngle < _minSlopeSlideAngle || slopeAngle > _maxSlopeSlideAngle)
+            {
+                return Vector3.zero;
+            }
+
+            Vector3 downhillDirection = Vector3.ProjectOnPlane(Vector3.down, groundNormal);
+            if (downhillDirection.sqrMagnitude <= MinimumDirectionSqrMagnitude)
+            {
+                return Vector3.zero;
+            }
+
+            float slideStrength = Mathf.InverseLerp(_minSlopeSlideAngle, _maxSlopeSlideAngle, slopeAngle);
+            float slideSpeed = slideStrength * _maxSlopeSlideSpeed;
+            return downhillDirection.normalized * slideSpeed;
+        }
+
+        private bool TryGetGroundNormal(out Vector3 groundNormal)
+        {
+            CharacterController controller = _player.CharacterController;
+            Vector3 bodyCenter = _player.GetBodyCenter(_player.PlayerTransform.position);
+            float sphereRadius = Mathf.Max(0.05f, controller.radius - controller.skinWidth);
+            float castDistance = (controller.height * 0.5f) - controller.radius + controller.skinWidth + 0.3f;
+            Vector3 origin = bodyCenter + (Vector3.up * 0.05f);
+
+            if (Physics.SphereCast(
+                    origin,
+                    sphereRadius,
+                    Vector3.down,
+                    out RaycastHit hit,
+                    castDistance,
+                    ~0,
+                    QueryTriggerInteraction.Ignore) &&
+                !IsOwnedCollider(hit.collider))
+            {
+                groundNormal = hit.normal;
+                return true;
+            }
+
+            groundNormal = Vector3.up;
+            return false;
+        }
+
+        private bool IsOwnedCollider(Collider collider)
+        {
+            return collider != null && collider.transform.IsChildOf(_player.PlayerTransform);
         }
     }
 }
