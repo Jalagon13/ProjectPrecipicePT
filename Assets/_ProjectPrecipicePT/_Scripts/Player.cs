@@ -16,18 +16,23 @@ namespace ProjectPrecipicePT
         }
 
         private CharacterController _characterController;
-        private Transform _cameraYawPivot;
+        [SerializeField] private Transform _cameraYawPivot;
         private Transform _cameraTransform;
+        private Transform _modelTransform;
         private PlayerLocomotionState _locomotionState;
         private PlayerClimbingState _climbingState;
         private PlayerLedgeClimbState _ledgeClimbState;
         private PlayerStateType _state;
         private float _pitch;
         private float _climbCameraYaw;
+        private bool _isModelUprightBlendActive;
+        private Quaternion _modelBlendStartRotation;
+        private float _modelBlendTimer;
+        private float _modelBlendDuration;
 
         public CharacterController CharacterController => _characterController;
         public Transform PlayerTransform => transform;
-        public Transform ModelTransform => transform.GetChild(1);
+        public Transform ModelTransform => _modelTransform;
         public Transform CameraTransform => _cameraTransform;
         public PlayerStateType State => _state;
         public PlayerLocomotionState LocomotionState => _locomotionState;
@@ -40,6 +45,7 @@ namespace ProjectPrecipicePT
             _locomotionState = GetComponent<PlayerLocomotionState>();
             _climbingState = GetComponent<PlayerClimbingState>();
             _ledgeClimbState = GetComponent<PlayerLedgeClimbState>();
+            _modelTransform = transform.Find("Model");
 
             SetupCameraHierarchy();
 
@@ -76,6 +82,8 @@ namespace ProjectPrecipicePT
                 HandleLook();
             }
 
+            TickModelUprightBlend();
+
             switch (_state)
             {
                 case PlayerStateType.Locomotion:
@@ -108,6 +116,26 @@ namespace ProjectPrecipicePT
             }
         }
 
+        public void LerpCameraTowardWorldDirection(Vector3 worldDirection, float t)
+        {
+            if (_cameraTransform == null || _cameraYawPivot == null || worldDirection.sqrMagnitude <= 0.0001f)
+            {
+                return;
+            }
+
+            Vector3 localDirection = Quaternion.Inverse(transform.rotation) * worldDirection.normalized;
+            Quaternion targetLocalRotation = Quaternion.LookRotation(localDirection, Vector3.up);
+            Vector3 targetEuler = targetLocalRotation.eulerAngles;
+            float targetYaw = NormalizeAngle(targetEuler.y);
+            float targetPitch = NormalizeAngle(targetEuler.x);
+
+            _climbCameraYaw = Mathf.LerpAngle(_climbCameraYaw, targetYaw, t);
+            _pitch = Mathf.LerpAngle(_pitch, targetPitch, t);
+
+            _cameraYawPivot.localRotation = Quaternion.Euler(0f, _climbCameraYaw, 0f);
+            _cameraTransform.localRotation = Quaternion.Euler(_pitch, 0f, 0f);
+        }
+
         public void AlignRootToCameraYaw()
         {
             if (_cameraTransform == null)
@@ -125,6 +153,89 @@ namespace ProjectPrecipicePT
             {
                 transform.rotation = Quaternion.LookRotation(desiredForward.normalized, Vector3.up);
             }
+        }
+
+        public void SnapDetachFacingToCurrentLook()
+        {
+            Vector3 desiredForward = Vector3.zero;
+
+            if (_cameraYawPivot != null)
+            {
+                desiredForward = Vector3.ProjectOnPlane(_cameraYawPivot.forward, Vector3.up);
+            }
+
+            if (desiredForward.sqrMagnitude <= 0.0001f && _cameraTransform != null)
+            {
+                desiredForward = Vector3.ProjectOnPlane(_cameraTransform.forward, Vector3.up);
+            }
+
+            if (desiredForward.sqrMagnitude <= 0.0001f)
+            {
+                desiredForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+            }
+
+            if (desiredForward.sqrMagnitude > 0.0001f)
+            {
+                transform.rotation = Quaternion.LookRotation(desiredForward.normalized, Vector3.up);
+            }
+
+            _climbCameraYaw = 0f;
+
+            if (_cameraYawPivot != null)
+            {
+                _cameraYawPivot.localRotation = Quaternion.identity;
+            }
+
+            if (_cameraTransform != null)
+            {
+                _cameraTransform.localRotation = Quaternion.Euler(_pitch, 0f, 0f);
+            }
+        }
+
+        public void ApplyClimbFacing(Vector3 surfaceNormal, float rotationLerpSpeed, bool instant)
+        {
+            Vector3 flatForward = Vector3.ProjectOnPlane(-surfaceNormal, Vector3.up);
+            if (flatForward.sqrMagnitude > 0.0001f)
+            {
+                Quaternion targetRootRotation = Quaternion.LookRotation(flatForward.normalized, Vector3.up);
+                transform.rotation = instant
+                    ? targetRootRotation
+                    : Quaternion.Slerp(transform.rotation, targetRootRotation, 1f - Mathf.Exp(-rotationLerpSpeed * Time.deltaTime));
+            }
+
+            if (_modelTransform == null)
+            {
+                return;
+            }
+
+            Quaternion targetModelRotation = Quaternion.LookRotation(-surfaceNormal.normalized, Vector3.up);
+            _modelTransform.rotation = instant
+                ? targetModelRotation
+                : Quaternion.Slerp(_modelTransform.rotation, targetModelRotation, 1f - Mathf.Exp(-rotationLerpSpeed * Time.deltaTime));
+        }
+
+        public void ResetModelRotation()
+        {
+            if (_modelTransform == null)
+            {
+                return;
+            }
+
+            _isModelUprightBlendActive = false;
+            _modelTransform.localRotation = Quaternion.identity;
+        }
+
+        public void BeginModelUprightBlend(float duration)
+        {
+            if (_modelTransform == null)
+            {
+                return;
+            }
+
+            _isModelUprightBlendActive = true;
+            _modelBlendStartRotation = _modelTransform.localRotation;
+            _modelBlendTimer = 0f;
+            _modelBlendDuration = Mathf.Max(0.01f, duration);
         }
 
         public Vector3 GetBodyCenter(Vector3 rootPosition)
@@ -162,14 +273,10 @@ namespace ProjectPrecipicePT
                 return;
             }
 
-            _cameraYawPivot = transform.Find("CameraYawPivot");
             if (_cameraYawPivot == null)
             {
-                GameObject pivotObject = new GameObject("CameraYawPivot");
-                _cameraYawPivot = pivotObject.transform;
-                _cameraYawPivot.SetParent(transform, false);
-                _cameraYawPivot.localPosition = Vector3.zero;
-                _cameraYawPivot.localRotation = Quaternion.identity;
+                Debug.LogWarning("Player is missing a CameraYawPivot reference.", this);
+                return;
             }
 
             if (_cameraTransform.parent != _cameraYawPivot)
@@ -210,7 +317,36 @@ namespace ProjectPrecipicePT
             _cameraTransform.localRotation = Quaternion.Euler(_pitch, 0f, 0f);
         }
 
+        private void TickModelUprightBlend()
+        {
+            if (!_isModelUprightBlendActive || _modelTransform == null)
+            {
+                return;
+            }
+
+            _modelBlendTimer += Time.deltaTime;
+            float t = Mathf.Clamp01(_modelBlendTimer / _modelBlendDuration);
+            float easedT = Mathf.SmoothStep(0f, 1f, t);
+            _modelTransform.localRotation = Quaternion.Slerp(_modelBlendStartRotation, Quaternion.identity, easedT);
+
+            if (t >= 1f)
+            {
+                _isModelUprightBlendActive = false;
+                _modelTransform.localRotation = Quaternion.identity;
+            }
+        }
+
         private static float NormalizePitch(float angle)
+        {
+            if (angle > 180f)
+            {
+                angle -= 360f;
+            }
+
+            return angle;
+        }
+
+        private static float NormalizeAngle(float angle)
         {
             if (angle > 180f)
             {

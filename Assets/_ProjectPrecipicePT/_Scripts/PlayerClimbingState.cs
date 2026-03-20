@@ -33,16 +33,26 @@ namespace ProjectPrecipicePT
         [Header("Climb Motion")]
         [SerializeField, Tooltip("Movement speed while the player is attached to a climbable surface.")]
         private float _climbMoveSpeed = 2.2f;
+        [SerializeField, Tooltip("Maximum duration of the entry lerp when the player first attaches to a climbable surface.")]
+        private float _climbAttachMaxDuration = 0.35f;
+        [SerializeField, Tooltip("Duration of the detach blend when the model returns from a climb tilt back to upright.")]
+        private float _climbDetachDuration = 0.35f;
         [SerializeField, Tooltip("How far the player capsule stays offset away from the climbed surface.")]
         private float _climbSurfaceOffset = 0.225f;
         [SerializeField, Tooltip("How quickly the detected climb normal smooths toward the latest sampled surface.")]
         private float _climbNormalLerpSpeed = 10f;
         [SerializeField, Tooltip("How quickly the player rotates to face the smoothed climb normal.")]
         private float _climbRotationLerpSpeed = 12f;
-        [SerializeField, Tooltip("Maximum angle change still treated as a valid climb continuation when moving upward.")]
-        private float _climbTopContinuationMaxAngle = 55f;
-        [SerializeField, Tooltip("Maximum angle change still treated as a valid climb continuation when moving downward.")]
-        private float _climbDownContinuationMaxAngle = 65f;
+        [SerializeField, Tooltip("Maximum surface angle change that still counts as a valid upward climb transition.")]
+        private float _maxUpwardSurfaceTransitionAngle = 55f;
+        [SerializeField, Tooltip("Maximum surface angle change that still counts as a valid downward climb transition.")]
+        private float _maxDownwardSurfaceTransitionAngle = 65f;
+
+        [Header("Fall Sliding")]
+        [SerializeField, Tooltip("Minimum downward slide distance applied when the player catches a wall while falling.")]
+        private float _fallGrabSlideMinDistance = 0.5f;
+        [SerializeField, Tooltip("Maximum downward slide distance applied when the player catches a wall at terminal velocity.")]
+        private float _fallGrabSlideMaxDistance = 2f;
 
         [Header("Climb Surface Probes")]
         [SerializeField, Tooltip("How far each climb sampling ray can search for a climbable surface.")]
@@ -55,6 +65,8 @@ namespace ProjectPrecipicePT
         private int _minimumSurfaceHits = 3;
         [SerializeField, Tooltip("Maximum allowed normal difference between sampled hits and the current climbed surface.")]
         private float _surfaceNormalConsistencyAngle = 60f;
+        [SerializeField, Tooltip("Draw the nine climb probe rays in the Scene view while climbing.")]
+        private bool _drawDebugProbeRays = true;
 
         [Header("Climb Look")]
         [SerializeField, Tooltip("Maximum horizontal free-look angle while climbing.")]
@@ -70,6 +82,13 @@ namespace ProjectPrecipicePT
         private PlayerLocomotionState _locomotionState;
         private PlayerLedgeClimbState _ledgeClimbState;
         private Vector3 _currentClimbNormal = Vector3.back;
+        private bool _isAttaching;
+        private Vector3 _attachStartPosition;
+        private Vector3 _attachTargetPosition;
+        private Vector3 _attachTargetNormal;
+        private float _attachTimer;
+        private float _attachDuration;
+        private bool _attachIncludesSlide;
 
         public LayerMask ClimbableLayers => _climbableLayers;
         public float ClimbCameraYawLimit => _climbCameraYawLimit;
@@ -124,6 +143,12 @@ namespace ProjectPrecipicePT
                 return;
             }
 
+            if (_isAttaching)
+            {
+                TickAttach();
+                return;
+            }
+
             Vector2 moveInput = GameInput.Instance.GetMovementVector();
             if (!TrySampleSurface(_player.PlayerTransform.position, out ClimbSurfaceSample currentSample))
             {
@@ -158,7 +183,7 @@ namespace ProjectPrecipicePT
             Vector3 climbDelta = ((wallRight * moveInput.x) + (wallUp * moveInput.y)).normalized * (_climbMoveSpeed * Time.deltaTime);
 
             if (Mathf.Abs(moveInput.y) > 0.01f &&
-                IsVerticalMovementBlocked(wallUp * Mathf.Sign(moveInput.y), climbDelta.magnitude, moveInput.y > 0f ? _climbTopContinuationMaxAngle : _climbDownContinuationMaxAngle))
+                IsVerticalMovementBlocked(wallUp * Mathf.Sign(moveInput.y), climbDelta.magnitude, moveInput.y > 0f ? _maxUpwardSurfaceTransitionAngle : _maxDownwardSurfaceTransitionAngle))
             {
                 if (moveInput.y > 0.01f)
                 {
@@ -185,19 +210,66 @@ namespace ProjectPrecipicePT
 
         private void BeginClimbing(RaycastHit hit)
         {
+            float fallSpeed = Mathf.Max(0f, -_locomotionState.VerticalVelocity);
+            bool shouldSlideOnGrab = !_player.CharacterController.isGrounded && fallSpeed > 0.01f;
+
             _locomotionState.ResetVerticalVelocity();
             _player.SetState(Player.PlayerStateType.Climbing);
             _player.ResetClimbCamera();
             _currentClimbNormal = hit.normal;
-            _player.PlayerTransform.rotation = Quaternion.LookRotation(-_currentClimbNormal, Vector3.up);
-            SnapToSurface(hit.point, hit.normal);
+            _attachStartPosition = _player.PlayerTransform.position;
+            _attachTargetNormal = hit.normal;
+            Vector3 snappedRootPosition = GetSnappedRootPosition(hit.point, hit.normal);
+            _attachIncludesSlide = false;
+
+            if (shouldSlideOnGrab)
+            {
+                float fallRatio = Mathf.Clamp01(fallSpeed / Mathf.Max(0.01f, _locomotionState.TerminalVelocity));
+                float slideDistance = Mathf.Lerp(_fallGrabSlideMinDistance, _fallGrabSlideMaxDistance, fallRatio);
+                _attachTargetPosition = snappedRootPosition - (GetWallUp(hit.normal) * slideDistance);
+                _attachIncludesSlide = slideDistance > 0.0001f;
+            }
+            else
+            {
+                _attachTargetPosition = snappedRootPosition;
+            }
+
+            _attachTimer = 0f;
+
+            float attachDistance = Vector3.Distance(_attachStartPosition, _attachTargetPosition);
+            float normalizedAttachDistance = Mathf.Clamp01(attachDistance / Mathf.Max(0.01f, _climbAttachRange));
+            _attachDuration = Mathf.Lerp(0.05f, Mathf.Max(0.05f, _climbAttachMaxDuration), normalizedAttachDistance);
+            _isAttaching = true;
         }
 
         private void ExitClimbing()
         {
-            _player.AlignRootToCameraYaw();
-            _player.ResetClimbCamera();
+            _isAttaching = false;
+            _player.SnapDetachFacingToCurrentLook();
+            _player.BeginModelUprightBlend(_climbDetachDuration);
             _player.SetState(Player.PlayerStateType.Locomotion);
+        }
+
+        private void TickAttach()
+        {
+            _attachTimer += Time.deltaTime;
+            float duration = Mathf.Max(0.01f, _attachDuration);
+            float t = Mathf.Clamp01(_attachTimer / duration);
+            float easedT = _attachIncludesSlide
+                ? 1f - Mathf.Pow(1f - t, 3f)
+                : Mathf.SmoothStep(0f, 1f, t);
+
+            _player.PlayerTransform.position = Vector3.Lerp(_attachStartPosition, _attachTargetPosition, easedT);
+            _player.ApplyClimbFacing(_attachTargetNormal, _climbRotationLerpSpeed, false);
+
+            if (t < 1f)
+            {
+                return;
+            }
+
+            _player.PlayerTransform.position = _attachTargetPosition;
+            _currentClimbNormal = _attachTargetNormal;
+            _isAttaching = false;
         }
 
         private bool TrySampleSurface(Vector3 rootPosition, out ClimbSurfaceSample sample)
@@ -246,15 +318,25 @@ namespace ProjectPrecipicePT
                 Vector3 rayDirection = (centerDirection + (wallRight * offset.x * tangent) + (wallUp * offset.y * tangent)).normalized;
                 Vector3 rayOrigin = bodyCenter + (rayDirection * _surfaceProbeStartOffset);
 
-                if (!TryGetClosestClimbHit(rayOrigin, rayDirection, _surfaceProbeDistance, out RaycastHit hit))
+                if (!TryGetClosestSurfaceHit(rayOrigin, rayDirection, _surfaceProbeDistance, out RaycastHit hit))
                 {
+                    DrawProbeRay(rayOrigin, rayDirection, _surfaceProbeDistance, Color.red);
+                    continue;
+                }
+
+                if (!IsSurfaceClimbable(hit.normal))
+                {
+                    DrawProbeRay(rayOrigin, rayDirection, hit.distance, new Color(0.45f, 0f, 0f));
                     continue;
                 }
 
                 if (Vector3.Angle(hit.normal, wallNormal) > _surfaceNormalConsistencyAngle)
                 {
+                    DrawProbeRay(rayOrigin, rayDirection, hit.distance, new Color(1f, 0.5f, 0f));
                     continue;
                 }
+
+                DrawProbeRay(rayOrigin, rayDirection, hit.distance, GetProbeRayColor(i));
 
                 hitCount++;
                 float pointWeight = 1f / Mathf.Max(0.01f, hit.distance);
@@ -319,6 +401,33 @@ namespace ProjectPrecipicePT
             return true;
         }
 
+        private void DrawProbeRay(Vector3 origin, Vector3 direction, float distance, Color color)
+        {
+            if (!_drawDebugProbeRays || _player.State != Player.PlayerStateType.Climbing)
+            {
+                return;
+            }
+
+            Debug.DrawRay(origin, direction * distance, color, 0f, false);
+        }
+
+        private static Color GetProbeRayColor(int rayIndex)
+        {
+            return rayIndex switch
+            {
+                0 => Color.white,
+                1 => Color.blue,
+                2 => Color.yellow,
+                3 => Color.green,
+                4 => Color.magenta,
+                5 => Color.cyan,
+                6 => new Color(0.5f, 0f, 1f),
+                7 => new Color(1f, 0.5f, 0.5f),
+                8 => new Color(0.5f, 1f, 0.5f),
+                _ => Color.white
+            };
+        }
+
         private bool HasMovementSupport(ClimbSurfaceSample sample, Vector2 moveInput)
         {
             bool movingUp = moveInput.y > 0.01f;
@@ -371,27 +480,12 @@ namespace ProjectPrecipicePT
 
         private bool TryBeginLedgeClimb()
         {
-            if (HasClimbableContinuationAbove())
+            if (!TryFindLedgeTop(out RaycastHit topHit))
             {
                 return false;
             }
 
-            Vector3 probeOrigin = _player.GetBodyCenter(_player.PlayerTransform.position) +
-                                  (Vector3.up * _ledgeClimbState.LedgeProbeUpOffset) +
-                                  (-_currentClimbNormal * _ledgeClimbState.LedgeProbeForwardOffset);
-
-            if (!Physics.Raycast(
-                    probeOrigin,
-                    Vector3.down,
-                    out RaycastHit topHit,
-                    _ledgeClimbState.LedgeDownProbeDistance,
-                    ~0,
-                    QueryTriggerInteraction.Ignore))
-            {
-                return false;
-            }
-
-            if (!CanStandOnSurface(topHit.normal))
+            if (HasClimbableContinuationAbove(topHit.point.y))
             {
                 return false;
             }
@@ -409,7 +503,43 @@ namespace ProjectPrecipicePT
             return true;
         }
 
-        private bool HasClimbableContinuationAbove()
+        private bool TryFindLedgeTop(out RaycastHit topHit)
+        {
+            Vector3 bodyCenter = _player.GetBodyCenter(_player.PlayerTransform.position);
+            Vector3 probeBase = bodyCenter + (Vector3.up * _ledgeClimbState.LedgeProbeUpOffset);
+            float surfaceClearance = _player.CharacterController.radius + _climbSurfaceOffset;
+            float firstForwardOffset = Mathf.Max(_ledgeClimbState.LedgeProbeForwardOffset, surfaceClearance + 0.05f);
+            float secondForwardOffset = firstForwardOffset + _ledgeClimbState.LedgeStandForwardOffset;
+            float thirdForwardOffset = secondForwardOffset + (_player.CharacterController.radius * 0.5f);
+
+            float[] forwardOffsets = { firstForwardOffset, secondForwardOffset, thirdForwardOffset };
+
+            for (int i = 0; i < forwardOffsets.Length; i++)
+            {
+                Vector3 probeOrigin = probeBase + (-_currentClimbNormal * forwardOffsets[i]);
+
+                if (!Physics.Raycast(
+                        probeOrigin,
+                        Vector3.down,
+                        out topHit,
+                        _ledgeClimbState.LedgeDownProbeDistance,
+                        ~0,
+                        QueryTriggerInteraction.Ignore))
+                {
+                    continue;
+                }
+
+                if (CanStandOnSurface(topHit.normal))
+                {
+                    return true;
+                }
+            }
+
+            topHit = default;
+            return false;
+        }
+
+        private bool HasClimbableContinuationAbove(float ledgeTopHeight)
         {
             Vector3 continuationProbeOrigin = _player.GetBodyCenter(_player.PlayerTransform.position) +
                                               (Vector3.up * _ledgeClimbState.LedgeContinuationCheckUpOffset) +
@@ -424,7 +554,8 @@ namespace ProjectPrecipicePT
                 return false;
             }
 
-            return Vector3.Angle(continuationHit.normal, _currentClimbNormal) <= _surfaceNormalConsistencyAngle;
+            return Vector3.Angle(continuationHit.normal, _currentClimbNormal) <= _surfaceNormalConsistencyAngle &&
+                   continuationHit.point.y > ledgeTopHeight + 0.05f;
         }
 
         private bool IsVerticalMovementBlocked(Vector3 moveDirection, float moveDistance, float allowedVerticalContinuationAngle)
@@ -476,16 +607,19 @@ namespace ProjectPrecipicePT
         {
             float normalLerpT = 1f - Mathf.Exp(-_climbNormalLerpSpeed * Time.deltaTime);
             _currentClimbNormal = Vector3.Slerp(_currentClimbNormal, sample.AverageNormal, normalLerpT).normalized;
-            Quaternion targetRotation = Quaternion.LookRotation(-_currentClimbNormal, Vector3.up);
-            float lerpT = 1f - Mathf.Exp(-_climbRotationLerpSpeed * Time.deltaTime);
-            _player.PlayerTransform.rotation = Quaternion.Slerp(_player.PlayerTransform.rotation, targetRotation, lerpT);
+            _player.ApplyClimbFacing(_currentClimbNormal, _climbRotationLerpSpeed, false);
             SnapToSurface(sample.AnchorPoint, _currentClimbNormal);
         }
 
         private void SnapToSurface(Vector3 hitPoint, Vector3 surfaceNormal)
         {
+            _player.PlayerTransform.position = GetSnappedRootPosition(hitPoint, surfaceNormal);
+        }
+
+        private Vector3 GetSnappedRootPosition(Vector3 hitPoint, Vector3 surfaceNormal)
+        {
             Vector3 desiredCenter = hitPoint + (surfaceNormal.normalized * (_player.CharacterController.radius + _climbSurfaceOffset));
-            _player.PlayerTransform.position = desiredCenter - _player.CharacterController.center;
+            return desiredCenter - _player.CharacterController.center;
         }
 
         private Vector3 GetWallUp(Vector3 wallNormal)
@@ -507,6 +641,24 @@ namespace ProjectPrecipicePT
                     continue;
                 }
 
+                if (hits[i].distance < closestDistance)
+                {
+                    closestDistance = hits[i].distance;
+                    closestHit = hits[i];
+                }
+            }
+
+            return closestDistance < float.MaxValue;
+        }
+
+        private bool TryGetClosestSurfaceHit(Vector3 origin, Vector3 direction, float maxDistance, out RaycastHit closestHit)
+        {
+            RaycastHit[] hits = Physics.RaycastAll(origin, direction, maxDistance, _climbableLayers, QueryTriggerInteraction.Ignore);
+            float closestDistance = float.MaxValue;
+            closestHit = default;
+
+            for (int i = 0; i < hits.Length; i++)
+            {
                 if (hits[i].distance < closestDistance)
                 {
                     closestDistance = hits[i].distance;

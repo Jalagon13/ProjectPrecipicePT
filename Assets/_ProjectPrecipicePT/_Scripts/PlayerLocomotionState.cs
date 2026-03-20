@@ -39,6 +39,8 @@ namespace ProjectPrecipicePT
         public float LookSensitivityX => _lookSensitivityX;
         public float LookSensitivityY => _lookSensitivityY;
         public float MaxLookPitch => _maxLookPitch;
+        public float VerticalVelocity => _verticalVelocity;
+        public float TerminalVelocity => _terminalVelocity;
         private void Awake()
         {
             _player = GetComponent<Player>();
