@@ -28,6 +28,7 @@ namespace ProjectPrecipicePT
             _playerInput.Player.Move.started += GameInput_OnMove;
             _playerInput.Player.Move.performed += GameInput_OnMove;
             _playerInput.Player.Move.canceled += GameInput_OnMove;
+            _playerInput.Player.ToggleInventory.started += GameInput_OnToggleInventory;
         }
 
         private void OnDestroy()
@@ -40,6 +41,7 @@ namespace ProjectPrecipicePT
             _playerInput.Player.Move.started -= GameInput_OnMove;
             _playerInput.Player.Move.performed -= GameInput_OnMove;
             _playerInput.Player.Move.canceled -= GameInput_OnMove;
+            _playerInput.Player.ToggleInventory.started -= GameInput_OnToggleInventory;
             _playerInput.Disable();
             _playerInput.Dispose();
 
@@ -47,6 +49,11 @@ namespace ProjectPrecipicePT
             {
                 Instance = null;
             }
+        }
+
+        private void GameInput_OnToggleInventory(InputAction.CallbackContext context)
+        {
+            
         }
 
         private void GameInput_OnMove(InputAction.CallbackContext context)

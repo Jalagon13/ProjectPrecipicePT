@@ -875,6 +875,7 @@ GameObject:
   - component: {fileID: 314856424}
   - component: {fileID: 314856426}
   - component: {fileID: 314856425}
+  - component: {fileID: 314856427}
   m_Layer: 0
   m_Name: LOCAL_MANAGERS
   m_TagString: Untagged
@@ -921,20 +922,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: eb1bba85258e04c46a35ca2327332d6e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ProjectPrecipicePT.FMODEvents
-  <PlayerHurtSFX>k__BackingField:
-    Guid:
-      Data1: 0
-      Data2: 0
-      Data3: 0
-      Data4: 0
-    Path: 
-  <ToolSwingSFX>k__BackingField:
-    Guid:
-      Data1: 0
-      Data2: 0
-      Data3: 0
-      Data4: 0
-    Path: 
 --- !u!114 &314856426
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -947,6 +934,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d35c8750089354bd49d6323230aba286, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ProjectPrecipicePT.AudioManager
+--- !u!114 &314856427
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 314856422}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 41eef24396f894d6ba38acfc02e58823, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ProjectPrecipicePT.InventoryManager
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0
@@ -7909,8 +7908,8 @@ SceneRoots:
   - {fileID: 680872708}
   - {fileID: 410087041}
   - {fileID: 832575519}
-  - {fileID: 1715515300}
   - {fileID: 1948954842}
+  - {fileID: 1715515300}
   - {fileID: 1839069039}
   - {fileID: 396370557}
   - {fileID: 481846667}
