@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -12,17 +13,24 @@ namespace ProjectPrecipicePT
         
         public event Action<int, InventoryStack> OnSelectedHotbarSlotChanged;
         public event Action OnInventoryChanged;
-
+        public event Action<bool> OnInventoryOpenChanged;
+        public event Action<InventoryStack> OnCursorStackChanged;
+        
         private const int _minimumHotbarSlotCount = 1;
         private const int _minimumTotalSlotCount = 8;
-
+        
         [Header("Inventory Layout")]
         [SerializeField, Min(_minimumTotalSlotCount), Tooltip("Total number of inventory slots available to the player, including the hotbar.")]
         private int _slotCount = 24;
         
         [SerializeField, Min(_minimumHotbarSlotCount), Tooltip("Number of slots reserved for the hotbar at the bottom of the screen.")]
         private int _hotbarSlotCount = 8;
-        
+
+        [Header("Starting Items")]
+        [SerializeField] private float _initialDelay;
+        [SerializeField] private float _delayBetweenItemsGiven;
+        [SerializeField] private List<InventoryStack> _startingItems = new();
+
         private readonly List<InventoryStack> _slots = new();
         
         public InventoryStack CursorStack { get; private set; } = new();
@@ -31,6 +39,7 @@ namespace ProjectPrecipicePT
         public int SelectedHotbarSlotIndex { get; private set; } = -1;
         public int HotbarSlotCount => Mathf.Min(_hotbarSlotCount, _slots.Count);
         public int SlotCount => _slots.Count;
+        public bool IsInventoryOpen { get; private set; }
         
 
         private void Awake()
@@ -40,10 +49,22 @@ namespace ProjectPrecipicePT
             InitializeSlots();
         }
         
-        private void Start()
+        private IEnumerator Start()
         {
             SubscribeToInput();
             SelectHotbarSlot(0);
+            
+            yield return null;
+            
+            CloseInventory(force: true);
+            
+            yield return new WaitForSeconds(_initialDelay);
+            
+            foreach (InventoryStack stack in _startingItems)
+            {
+                AddItem(stack.Item, stack.Amount);
+                yield return new WaitForSeconds(_delayBetweenItemsGiven);
+            }
         }
 
         private void OnDestroy()
@@ -57,12 +78,70 @@ namespace ProjectPrecipicePT
         {
             GameInput.Instance.OnSelectSlot += GameInput_OnSelectSlot;
             GameInput.Instance.OnScrollWheel += GameInput_OnScrollWheel;
+            GameInput.Instance.OnToggleInventory += GameInput_OnToggleInventory;
         }
 
         private void UnSubscribeFromInput()
         {
             GameInput.Instance.OnSelectSlot -= GameInput_OnSelectSlot;
             GameInput.Instance.OnScrollWheel -= GameInput_OnScrollWheel;
+            GameInput.Instance.OnToggleInventory -= GameInput_OnToggleInventory;
+        }
+
+        private void GameInput_OnToggleInventory(object sender, InputAction.CallbackContext e)
+        {
+            ToggleInventory();
+        }
+
+        public void ToggleInventory()
+        {
+            if(IsInventoryOpen)
+            {
+                CloseInventory();
+                return;
+            }
+            
+            OpenInventory();
+        }
+
+        private void OpenInventory()
+        {
+            if(IsInventoryOpen || !CanOpenInventory())
+            {
+                return;
+            }
+            
+            IsInventoryOpen = true;
+            OnInventoryOpenChanged?.Invoke(true);
+            OnInventoryChanged?.Invoke();
+            OnCursorStackChanged?.Invoke(CursorStack.Clone());
+
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+
+            GameInput.Instance.SetGameplayInputBlocked(true);
+        }
+
+        private void CloseInventory(bool force = false)
+        {
+            if (!IsInventoryOpen && !force)
+            {
+                return;
+            }
+            
+            IsInventoryOpen = false;
+            OnInventoryOpenChanged?.Invoke(false);
+            OnInventoryChanged?.Invoke();
+
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+
+            GameInput.Instance.SetGameplayInputBlocked(false);
+        }
+
+        private bool CanOpenInventory()
+        {
+            return Player.Instance == null || Player.Instance.State == Player.PlayerStateType.Locomotion;
         }
 
         private void GameInput_OnSelectSlot(object sender, InputAction.CallbackContext context)
@@ -129,7 +208,7 @@ namespace ProjectPrecipicePT
 
         #endregion
 
-        #region Inventory Functions
+        #region Inventory Item Functions
         
         public int AddItem(ItemSO item, int amount = 1)
         {
@@ -272,6 +351,20 @@ namespace ProjectPrecipicePT
 
         #endregion
 
+        #region Slot Click Functions
+
+        public void HandleSlotLeftClick(int slotIndex, bool isShiftHeld)
+        {
+
+        }
+
+        public void HandleSlotRightClick(int slotIndex)
+        {
+
+        }
+
+        #endregion
+
         private void SelectHotbarSlot(int hotbarSlotIndex)
         {
             if(HotbarSlotCount == 0)
@@ -299,8 +392,13 @@ namespace ProjectPrecipicePT
                 Debug.Log($"Invalid hotbar slot index: {SelectedHotbarSlotIndex}");
                 return;
             }
-            Debug.Log($"Selected hotbar slot index: {SelectedHotbarSlotIndex}");
+            
             SelectedHotbarStack = _slots[SelectedHotbarSlotIndex].Clone();
+        }
+
+        public InventoryStack GetSlot(int slotIndex)
+        {
+            return IsValidSlotIndex(slotIndex) ? _slots[slotIndex] : new InventoryStack();
         }
 
         private bool IsValidSlotIndex(int slotIndex)

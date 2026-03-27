@@ -15,6 +15,7 @@ namespace ProjectPrecipicePT
         public event EventHandler<InputAction.CallbackContext> OnSelectSlot;
 
         private PlayerInput _playerInput;
+        private bool _isGameplayInputBlocked;
 
         private void Awake()
         {
@@ -80,28 +81,58 @@ namespace ProjectPrecipicePT
 
         public Vector2 GetMovementVector()
         {
+            if (_isGameplayInputBlocked)
+            {
+                return Vector2.zero;
+            }
+
             Vector2 movementVector = _playerInput.Player.Move.ReadValue<Vector2>();
             return movementVector.sqrMagnitude > 1f ? movementVector.normalized : movementVector;
         }
 
         public Vector2 GetLookVector()
         {
+            if (_isGameplayInputBlocked)
+            {
+                return Vector2.zero;
+            }
+
             return _playerInput.Player.Look.ReadValue<Vector2>();
         }
 
         public bool IsJumpPressedThisFrame()
         {
+            if (_isGameplayInputBlocked)
+            {
+                return false;
+            }
+
             return _playerInput.Player.Jump.WasPressedThisFrame();
         }
 
         public bool IsSprintPressed()
         {
+            if (_isGameplayInputBlocked)
+            {
+                return false;
+            }
+
             return _playerInput.Player.Sprint.IsPressed();
         }
 
         public bool IsClimbingPressed()
         {
+            if (_isGameplayInputBlocked)
+            {
+                return false;
+            }
+
             return _playerInput.Player.Climbing.IsPressed();
+        }
+
+        public void SetGameplayInputBlocked(bool isBlocked)
+        {
+            _isGameplayInputBlocked = isBlocked;
         }
     }
 }

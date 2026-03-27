@@ -74,7 +74,11 @@ namespace ProjectPrecipicePT
                 return;
             }
 
-            HandleLookIfAllowed();
+            if (!InventoryManager.Instance.IsInventoryOpen)
+            {
+                HandleLookIfAllowed();
+            }
+            
             TickModelUprightBlend();
             TickCurrentState();
         }
