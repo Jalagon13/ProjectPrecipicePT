@@ -9,6 +9,8 @@ namespace ProjectPrecipicePT
     [RequireComponent(typeof(PlayerLedgeClimbState))]
     public class Player : MonoBehaviour
     {
+        public static Player Instance { get; private set; }
+    
         private const float MinimumDirectionSqrMagnitude = 0.0001f;
 
         public enum PlayerStateType
@@ -47,6 +49,9 @@ namespace ProjectPrecipicePT
 
         private void Awake()
         {
+            Instance = this;
+
+
             CacheReferences();
             SetupCameraHierarchy();
             InitializePitchFromCamera();
