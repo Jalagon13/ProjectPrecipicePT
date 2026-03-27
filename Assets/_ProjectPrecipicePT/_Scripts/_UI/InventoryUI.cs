@@ -36,6 +36,7 @@ namespace ProjectPrecipicePT
             InventoryManager.Instance.OnInventoryChanged -= RefreshAll;
             InventoryManager.Instance.OnSelectedHotbarSlotChanged -= HandleSelectedHotbarChanged;
             InventoryManager.Instance.OnInventoryOpenChanged -= SetInventoryVisible;
+            InventoryManager.Instance.OnCursorStackChanged -= RefreshDragItem;
         }
         
         private void Start()
@@ -56,6 +57,22 @@ namespace ProjectPrecipicePT
             InventoryManager.Instance.OnInventoryChanged += RefreshAll;
             InventoryManager.Instance.OnSelectedHotbarSlotChanged += HandleSelectedHotbarChanged;
             InventoryManager.Instance.OnInventoryOpenChanged += SetInventoryVisible;
+            InventoryManager.Instance.OnCursorStackChanged += RefreshDragItem;
+        }
+
+        private void RefreshDragItem(InventoryStack cursorStack)
+        {
+            bool shouldShow = InventoryManager.Instance.IsInventoryOpen &&
+                cursorStack != null && !cursorStack.IsEmpty;
+
+
+            _dragItemRoot.gameObject.SetActive(shouldShow);
+
+            if (!shouldShow) return;
+
+            _dragItemIcon.sprite = cursorStack.Item.InventoryIcon;
+            _dragItemIcon.enabled = cursorStack.Item.InventoryIcon != null;
+            _dragItemCountText.text = cursorStack.Amount > 1 ? cursorStack.Amount.ToString() : string.Empty;
         }
 
         private void HandleSelectedHotbarChanged(int arg1, InventoryStack stack)
@@ -95,7 +112,7 @@ namespace ProjectPrecipicePT
                 slotUi.Refresh(stack, isSelectedHotbarSlot);
             }
 
-            RefreshDragItem();
+            RefreshDragItem(InventoryManager.Instance.CursorStack);
         }
 
         public void SetInventoryVisible(bool isVisible)
@@ -110,23 +127,8 @@ namespace ProjectPrecipicePT
             }
             else
             {
-                RefreshDragItem();
+                RefreshDragItem(InventoryManager.Instance.CursorStack);
             }
-        }
-
-        private void RefreshDragItem()
-        {
-            bool shouldShow = InventoryManager.Instance.IsInventoryOpen && 
-                InventoryManager.Instance.CursorStack != null && !InventoryManager.Instance.CursorStack.IsEmpty;
-                
-                
-            _dragItemRoot.gameObject.SetActive(shouldShow);
-            
-            if(!shouldShow) return;
-
-            _dragItemIcon.sprite = InventoryManager.Instance.CursorStack.Item.InventoryIcon;
-            _dragItemIcon.enabled = InventoryManager.Instance.CursorStack.Item.InventoryIcon != null;
-            _dragItemCountText.text = InventoryManager.Instance.CursorStack.Amount > 1 ? InventoryManager.Instance.CursorStack.Amount.ToString() : string.Empty;
         }
 
         private void UpdateDragItemPosition()

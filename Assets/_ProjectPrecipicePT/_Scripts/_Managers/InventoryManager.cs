@@ -124,7 +124,7 @@ namespace ProjectPrecipicePT
 
         private void CloseInventory(bool force = false)
         {
-            if (!IsInventoryOpen && !force)
+            if ((!IsInventoryOpen && !force) || !CursorStack.IsEmpty)
             {
                 return;
             }
@@ -355,13 +355,179 @@ namespace ProjectPrecipicePT
 
         public void HandleSlotLeftClick(int slotIndex, bool isShiftHeld)
         {
+            if (!IsValidSlotIndex(slotIndex))
+            {
+                return;
+            }
 
+            if (isShiftHeld && CursorStack.IsEmpty)
+            {
+                QuickMoveSlot(slotIndex);
+                return;
+            }
+            
+            InventoryStack slotStack = _slots[slotIndex];
+            if(CursorStack.IsEmpty)
+            {
+                if(slotStack.IsEmpty)
+                {
+                    return;
+                }
+                
+                CursorStack = slotStack.Clone();
+                slotStack.Clear();
+                RefreshAfterInventoryChange();
+                NotifyCursorStackChanged();
+                return;
+            }
+            
+            if(slotStack.IsEmpty)
+            {
+                _slots[slotIndex] = CursorStack.Clone();
+                CursorStack.Clear();
+                RefreshAfterInventoryChange();
+                NotifyCursorStackChanged();
+                return;
+            }
+
+            if (slotStack.CanStackWith(CursorStack.Item))
+            {
+                int movedAmount = slotStack.AddAmount(CursorStack.Amount);
+                CursorStack.RemoveAmount(movedAmount);
+                if (CursorStack.IsEmpty)
+                {
+                    CursorStack.Clear();
+                }
+
+                RefreshAfterInventoryChange();
+                NotifyCursorStackChanged();
+                return;
+            }
+
+            InventoryStack swappedStack = slotStack.Clone();
+            _slots[slotIndex] = CursorStack.Clone();
+            CursorStack = swappedStack;
+            RefreshAfterInventoryChange();
+            NotifyCursorStackChanged();
         }
 
         public void HandleSlotRightClick(int slotIndex)
         {
+            if (!IsValidSlotIndex(slotIndex))
+            {
+                return;
+            }
 
+            InventoryStack slotStack = _slots[slotIndex];
+            if (CursorStack.IsEmpty)
+            {
+                if (slotStack.IsEmpty)
+                {
+                    return;
+                }
+
+                int amountToTake = Mathf.CeilToInt(slotStack.Amount * 0.5f);
+                CursorStack = new InventoryStack(slotStack.Item, amountToTake);
+                slotStack.RemoveAmount(amountToTake);
+                RefreshAfterInventoryChange();
+                NotifyCursorStackChanged();
+                return;
+            }
+
+            if (slotStack.IsEmpty)
+            {
+                _slots[slotIndex] = new InventoryStack(CursorStack.Item, 1);
+                CursorStack.RemoveAmount(1);
+                RefreshAfterInventoryChange();
+                NotifyCursorStackChanged();
+                return;
+            }
+
+            if (!slotStack.CanStackWith(CursorStack.Item) || slotStack.IsFull)
+            {
+                return;
+            }
+
+            slotStack.AddAmount(1);
+            CursorStack.RemoveAmount(1);
+            RefreshAfterInventoryChange();
+            NotifyCursorStackChanged();
         }
+
+        private void NotifyCursorStackChanged()
+        {
+            if (CursorStack.IsEmpty)
+            {
+                CursorStack.Clear();
+            }
+
+            OnCursorStackChanged?.Invoke(CursorStack.Clone());
+        }
+
+        private void QuickMoveSlot(int slotIndex)
+        {
+            if (!IsValidSlotIndex(slotIndex))
+            {
+                return;
+            }
+
+            InventoryStack sourceStack = _slots[slotIndex];
+            if (sourceStack.IsEmpty)
+            {
+                return;
+            }
+
+            bool isHotbarSlot = slotIndex < HotbarSlotCount;
+            int targetStart = isHotbarSlot ? HotbarSlotCount : 0;
+            int targetEnd = isHotbarSlot ? _slots.Count : HotbarSlotCount;
+
+            MoveSlotIntoRange(slotIndex, targetStart, targetEnd);
+            RefreshAfterInventoryChange();
+        }
+
+        private void MoveSlotIntoRange(int sourceIndex, int targetStart, int targetEnd)
+        {
+            InventoryStack sourceStack = _slots[sourceIndex];
+            if (sourceStack.IsEmpty)
+            {
+                return;
+            }
+
+            for (int targetIndex = targetStart; targetIndex < targetEnd && !sourceStack.IsEmpty; targetIndex++)
+            {
+                if (targetIndex == sourceIndex)
+                {
+                    continue;
+                }
+
+                InventoryStack targetStack = _slots[targetIndex];
+                if (!targetStack.CanStackWith(sourceStack.Item) || targetStack.IsFull)
+                {
+                    continue;
+                }
+
+                int movedAmount = targetStack.AddAmount(sourceStack.Amount);
+                sourceStack.RemoveAmount(movedAmount);
+            }
+
+            for (int targetIndex = targetStart; targetIndex < targetEnd && !sourceStack.IsEmpty; targetIndex++)
+            {
+                if (targetIndex == sourceIndex)
+                {
+                    continue;
+                }
+
+                InventoryStack targetStack = _slots[targetIndex];
+                if (!targetStack.IsEmpty)
+                {
+                    continue;
+                }
+
+                targetStack.Set(sourceStack.Item, sourceStack.Amount);
+                sourceStack.Clear();
+            }
+        }
+
 
         #endregion
 
