@@ -1092,6 +1092,7 @@ GameObject:
   - component: {fileID: 314856426}
   - component: {fileID: 314856425}
   - component: {fileID: 314856427}
+  - component: {fileID: 314856428}
   m_Layer: 0
   m_Name: LOCAL_MANAGERS
   m_TagString: Untagged
@@ -1162,15 +1163,25 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 41eef24396f894d6ba38acfc02e58823, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ProjectPrecipicePT.InventoryManager
-  _slotCount: 24
+  _slotCount: 16
   _hotbarSlotCount: 8
   _initialDelay: 0.25
   _delayBetweenItemsGiven: 0.1
   _startingItems:
   - _item: {fileID: 11400000, guid: 81b4f393c5821440aa8b28e817e5c4f3, type: 2}
-    _amount: 10
   - _item: {fileID: 11400000, guid: 4bd46d7bf907e4dcab6a900b6ee7bbfa, type: 2}
-    _amount: 15
+--- !u!114 &314856428
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 314856422}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a00dea5c56b8a4932a9b4008de2e6810, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ProjectPrecipicePT.StaminaManager
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0
@@ -1221,7 +1232,7 @@ Camera:
     y: 0
     width: 1
     height: 1
-  near clip plane: 0.3
+  near clip plane: 0.15
   far clip plane: 1000
   field of view: 60
   orthographic: 0

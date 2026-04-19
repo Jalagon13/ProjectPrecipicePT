@@ -29,14 +29,14 @@ namespace ProjectPrecipicePT
             name = isHotbarSlot ? $"Hotbar Slot {slotIndex + 1}" : $"Inventory Slot {slotIndex + 1}";
         }
         
-        public void Refresh(InventoryStack stack, bool isSelected)
+        public void Refresh(InventorySlotItem stack, bool isSelected)
         {
             _selectionImage.enabled = isSelected;
 
             bool showItem = stack != null && !stack.IsEmpty && stack.Item != null;
             _iconImage.enabled = showItem && stack.Item.InventoryIcon != null;
             _iconImage.sprite = showItem ? stack.Item.InventoryIcon : null;
-            _countText.text = showItem && stack.Amount > 1 ? stack.Amount.ToString() : string.Empty;
+            _countText.text = string.Empty;
         }
     }
 }

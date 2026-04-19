@@ -18,7 +18,7 @@ namespace ProjectPrecipicePT
         [SerializeField] private Image _inventoryBackground;
 
 
-        [Header("Cursor InventoryStack UI")]
+        [Header("Cursor Inventory UI")]
         [SerializeField] private RectTransform _dragItemRoot;
         [SerializeField] private Image _dragItemIcon;
         [SerializeField] private TextMeshProUGUI _dragItemCountText;
@@ -60,7 +60,7 @@ namespace ProjectPrecipicePT
             InventoryManager.Instance.OnCursorStackChanged += RefreshDragItem;
         }
 
-        private void RefreshDragItem(InventoryStack cursorStack)
+        private void RefreshDragItem(InventorySlotItem cursorStack)
         {
             bool shouldShow = InventoryManager.Instance.IsInventoryOpen &&
                 cursorStack != null && !cursorStack.IsEmpty;
@@ -72,10 +72,10 @@ namespace ProjectPrecipicePT
 
             _dragItemIcon.sprite = cursorStack.Item.InventoryIcon;
             _dragItemIcon.enabled = cursorStack.Item.InventoryIcon != null;
-            _dragItemCountText.text = cursorStack.Amount > 1 ? cursorStack.Amount.ToString() : string.Empty;
+            _dragItemCountText.text = string.Empty;
         }
 
-        private void HandleSelectedHotbarChanged(int arg1, InventoryStack stack)
+        private void HandleSelectedHotbarChanged(int arg1, InventorySlotItem stack)
         {
             RefreshAll();
         }
@@ -107,7 +107,7 @@ namespace ProjectPrecipicePT
         {
             foreach (InventorySlotUI slotUi in _slotUis)
             {
-                InventoryStack stack = InventoryManager.Instance.GetSlot(slotUi.SlotIndex);
+                InventorySlotItem stack = InventoryManager.Instance.GetSlot(slotUi.SlotIndex);
                 bool isSelectedHotbarSlot = slotUi.IsHotbarSlot && slotUi.SlotIndex == InventoryManager.Instance.SelectedHotbarSlotIndex;
                 slotUi.Refresh(stack, isSelectedHotbarSlot);
             }
@@ -148,14 +148,9 @@ namespace ProjectPrecipicePT
                ((Keyboard.current.leftShiftKey?.isPressed ?? false) ||
                 (Keyboard.current.rightShiftKey?.isPressed ?? false));
 
-            switch (button)
+            if (button == PointerEventData.InputButton.Left)
             {
-                case PointerEventData.InputButton.Left:
-                    InventoryManager.Instance.HandleSlotLeftClick(slotIndex, isShiftHeld);
-                    break;
-                case PointerEventData.InputButton.Right:
-                    InventoryManager.Instance.HandleSlotRightClick(slotIndex);
-                    break;
+                InventoryManager.Instance.HandleSlotLeftClick(slotIndex, isShiftHeld);
             }
         }
     }

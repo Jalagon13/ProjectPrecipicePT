@@ -9,60 +9,59 @@ namespace ProjectPrecipicePT
 {
     public class InventoryManager : MonoBehaviour
     {
-        public static InventoryManager Instance { get; private set;  }
-        
-        public event Action<int, InventoryStack> OnSelectedHotbarSlotChanged;
+        public static InventoryManager Instance { get; private set; }
+
+        public event Action<int, InventorySlotItem> OnSelectedHotbarSlotChanged;
         public event Action OnInventoryChanged;
         public event Action<bool> OnInventoryOpenChanged;
-        public event Action<InventoryStack> OnCursorStackChanged;
-        
+        public event Action<InventorySlotItem> OnCursorStackChanged;
+
         private const int _minimumHotbarSlotCount = 1;
         private const int _minimumTotalSlotCount = 8;
-        
+
         [Header("Inventory Layout")]
         [SerializeField, Min(_minimumTotalSlotCount), Tooltip("Total number of inventory slots available to the player, including the hotbar.")]
         private int _slotCount = 24;
-        
+
         [SerializeField, Min(_minimumHotbarSlotCount), Tooltip("Number of slots reserved for the hotbar at the bottom of the screen.")]
         private int _hotbarSlotCount = 8;
 
         [Header("Starting Items")]
         [SerializeField] private float _initialDelay;
         [SerializeField] private float _delayBetweenItemsGiven;
-        [SerializeField] private List<InventoryStack> _startingItems = new();
+        [SerializeField] private List<InventorySlotItem> _startingItems = new();
 
-        private readonly List<InventoryStack> _slots = new();
-        
-        public InventoryStack CursorStack { get; private set; } = new();
-        public InventoryStack SelectedHotbarStack { get; private set; } = new();
-        
+        private readonly List<InventorySlotItem> _slots = new();
+
+        public InventorySlotItem CursorStack { get; private set; } = new();
+        public InventorySlotItem SelectedHotbarStack { get; private set; } = new();
+
         public int SelectedHotbarSlotIndex { get; private set; } = -1;
         public int HotbarSlotCount => Mathf.Min(_hotbarSlotCount, _slots.Count);
         public int SlotCount => _slots.Count;
         public bool IsInventoryOpen { get; private set; }
-        
+        public bool IsFull => !_slots.Exists(slot => slot.IsEmpty);
 
         private void Awake()
         {
             Instance = this;
-            
             InitializeSlots();
         }
-        
+
         private IEnumerator Start()
         {
             SubscribeToInput();
             SelectHotbarSlot(0);
-            
+
             yield return null;
-            
+
             CloseInventory(force: true);
-            
+
             yield return new WaitForSeconds(_initialDelay);
-            
-            foreach (InventoryStack stack in _startingItems)
+
+            foreach (InventorySlotItem slotItem in _startingItems)
             {
-                AddItem(stack.Item, stack.Amount);
+                AddItem(slotItem.Item);
                 yield return new WaitForSeconds(_delayBetweenItemsGiven);
             }
         }
@@ -95,22 +94,22 @@ namespace ProjectPrecipicePT
 
         public void ToggleInventory()
         {
-            if(IsInventoryOpen)
+            if (IsInventoryOpen)
             {
                 CloseInventory();
                 return;
             }
-            
+
             OpenInventory();
         }
 
         private void OpenInventory()
         {
-            if(IsInventoryOpen || !CanOpenInventory())
+            if (IsInventoryOpen || !CanOpenInventory())
             {
                 return;
             }
-            
+
             IsInventoryOpen = true;
             OnInventoryOpenChanged?.Invoke(true);
             OnInventoryChanged?.Invoke();
@@ -128,7 +127,7 @@ namespace ProjectPrecipicePT
             {
                 return;
             }
-            
+
             IsInventoryOpen = false;
             OnInventoryOpenChanged?.Invoke(false);
             OnInventoryChanged?.Invoke();
@@ -151,12 +150,11 @@ namespace ProjectPrecipicePT
                 return;
             }
 
-            var control = context.control; // The control (key/button) that triggered this
+            var control = context.control;
 
-            // If the key is Digit1–Digit8
             if (control is KeyControl key)
             {
-                int slotIndex = key.keyCode - Key.Digit1; // Convert Key.Digit1 to 0, Digit2 to 1, etc.
+                int slotIndex = key.keyCode - Key.Digit1;
                 if (slotIndex >= 0 && slotIndex < HotbarSlotCount)
                 {
                     SelectHotbarSlot(slotIndex);
@@ -173,35 +171,23 @@ namespace ProjectPrecipicePT
 
             Vector2 scrollDelta = context.ReadValue<Vector2>();
             int itemCount = _hotbarSlotCount;
-            if (itemCount == 0) return;
+            if (itemCount == 0)
+            {
+                return;
+            }
 
             int selectedSlotIndex = SelectedHotbarSlotIndex;
 
-
-            if (scrollDelta.y > 0f) // Scroll up
+            if (scrollDelta.y > 0f)
             {
                 int upcomingIndex = selectedSlotIndex - 1;
-                if (upcomingIndex < 0)
-                {
-                    selectedSlotIndex = itemCount - 1; // Wrap to last item
-                }
-                else
-                {
-                    selectedSlotIndex--;
-                }
+                selectedSlotIndex = upcomingIndex < 0 ? itemCount - 1 : selectedSlotIndex - 1;
                 SelectHotbarSlot(selectedSlotIndex);
             }
-            else if (scrollDelta.y < 0f) // Scroll down
+            else if (scrollDelta.y < 0f)
             {
                 int upcomingIndex = selectedSlotIndex + 1;
-                if (upcomingIndex >= itemCount)
-                {
-                    selectedSlotIndex = 0; // Wrap to first item
-                }
-                else
-                {
-                    selectedSlotIndex++;
-                }
+                selectedSlotIndex = upcomingIndex >= itemCount ? 0 : selectedSlotIndex + 1;
                 SelectHotbarSlot(selectedSlotIndex);
             }
         }
@@ -209,50 +195,59 @@ namespace ProjectPrecipicePT
         #endregion
 
         #region Inventory Item Functions
-        
+
         public int AddItem(ItemSO item, int amount = 1)
         {
-            if(item == null || amount <= 0)
+            if (item == null || amount <= 0)
             {
                 return 0;
             }
-            
+
+            if (IsFull)
+            {
+                return amount;
+            }
+
             int remainingAmount = amount;
-            FillExistingStacks(item, ref remainingAmount);
             FillEmptySlots(item, ref remainingAmount);
-            RefreshAfterInventoryChange();
+
+            if (remainingAmount < amount)
+            {
+                RefreshAfterInventoryChange();
+            }
+
             return remainingAmount;
         }
-        
-        public List<InventoryStack> AddItems(IEnumerable<InventoryStack> stacksToAdd)
-        {
-            List<InventoryStack> leftOvers = new();
 
-            if (stacksToAdd == null)
+        public List<InventorySlotItem> AddItems(IEnumerable<InventorySlotItem> itemsToAdd)
+        {
+            List<InventorySlotItem> leftOvers = new();
+
+            if (itemsToAdd == null)
             {
                 return leftOvers;
             }
 
-            foreach (InventoryStack stack in stacksToAdd)
+            foreach (InventorySlotItem slotItem in itemsToAdd)
             {
-                if(stack == null || stack.IsEmpty)
+                if (slotItem == null || slotItem.IsEmpty)
                 {
                     continue;
                 }
 
-                int remainingAmount = AddItem(stack.Item, stack.Amount);
-                if(remainingAmount > 0)
+                int remainingAmount = AddItem(slotItem.Item);
+                if (remainingAmount > 0)
                 {
-                    leftOvers.Add(new InventoryStack(stack.Item, remainingAmount));
+                    leftOvers.Add(new InventorySlotItem(slotItem.Item));
                 }
             }
-            
+
             return leftOvers;
         }
-        
+
         public int Removeitem(ItemSO item, int amount = 1)
         {
-            if(item == null || amount <= 0)
+            if (item == null || amount <= 0)
             {
                 return amount;
             }
@@ -260,86 +255,62 @@ namespace ProjectPrecipicePT
             int remainingAmount = amount;
             for (int index = _slots.Count - 1; index >= 0 && remainingAmount > 0; index--)
             {
-                InventoryStack slot = _slots[index];
-                if(slot.IsEmpty || slot.Item != item)
+                InventorySlotItem slot = _slots[index];
+                if (slot.IsEmpty || slot.Item != item)
                 {
                     continue;
                 }
-                
-                remainingAmount -= slot.RemoveAmount(remainingAmount);
+
+                slot.Clear();
+                remainingAmount--;
             }
-            
+
             RefreshAfterInventoryChange();
             return remainingAmount;
         }
-        
-        public List<InventoryStack> RemoveItems(IEnumerable<InventoryStack> stacksToRemove)
+
+        public List<InventorySlotItem> RemoveItems(IEnumerable<InventorySlotItem> itemsToRemove)
         {
-            List<InventoryStack> leftOvers = new();
-            
-            if (stacksToRemove == null)
+            List<InventorySlotItem> leftOvers = new();
+
+            if (itemsToRemove == null)
             {
                 return leftOvers;
             }
 
-            foreach (InventoryStack stack in stacksToRemove)
+            foreach (InventorySlotItem slotItem in itemsToRemove)
             {
-                if(stack == null || stack.IsEmpty)
+                if (slotItem == null || slotItem.IsEmpty)
                 {
                     continue;
                 }
 
-                int remainingAmount = Removeitem(stack.Item, stack.Amount);
-                if(remainingAmount > 0)
+                int remainingAmount = Removeitem(slotItem.Item);
+                if (remainingAmount > 0)
                 {
-                    leftOvers.Add(new InventoryStack(stack.Item, remainingAmount));
+                    leftOvers.Add(new InventorySlotItem(slotItem.Item));
                 }
             }
-            
+
             return leftOvers;
-        }
-
-        private void FillExistingStacks(ItemSO item, ref int remainingAmount)
-        {
-            if(!item.IsStackable)
-            {
-                return;
-            }
-            
-            foreach (InventoryStack slot in _slots)
-            {
-                if(remainingAmount <= 0)
-                {
-                    return;
-                }
-                
-                if(!slot.CanStackWith(item) || slot.IsFull)
-                {
-                    continue;
-                }
-                
-                int addedAmount = slot.AddAmount(remainingAmount);
-                remainingAmount -= addedAmount;
-            }
         }
 
         private void FillEmptySlots(ItemSO item, ref int remainingAmount)
         {
-            foreach (InventoryStack slot in _slots)
+            foreach (InventorySlotItem slot in _slots)
             {
-                if(remainingAmount <= 0)
+                if (remainingAmount <= 0)
                 {
                     return;
                 }
-                
-                if(!slot.IsEmpty)
+
+                if (!slot.IsEmpty)
                 {
                     continue;
                 }
-                
-                int amountForSlot = Mathf.Min(item.MaxStackSize, remainingAmount);
-                slot.Set(item, amountForSlot);
-                remainingAmount -= amountForSlot;
+
+                slot.Set(item);
+                remainingAmount--;
             }
         }
 
@@ -365,23 +336,23 @@ namespace ProjectPrecipicePT
                 QuickMoveSlot(slotIndex);
                 return;
             }
-            
-            InventoryStack slotStack = _slots[slotIndex];
-            if(CursorStack.IsEmpty)
+
+            InventorySlotItem slotItem = _slots[slotIndex];
+            if (CursorStack.IsEmpty)
             {
-                if(slotStack.IsEmpty)
+                if (slotItem.IsEmpty)
                 {
                     return;
                 }
-                
-                CursorStack = slotStack.Clone();
-                slotStack.Clear();
+
+                CursorStack = slotItem.Clone();
+                slotItem.Clear();
                 RefreshAfterInventoryChange();
                 NotifyCursorStackChanged();
                 return;
             }
-            
-            if(slotStack.IsEmpty)
+
+            if (slotItem.IsEmpty)
             {
                 _slots[slotIndex] = CursorStack.Clone();
                 CursorStack.Clear();
@@ -390,66 +361,9 @@ namespace ProjectPrecipicePT
                 return;
             }
 
-            if (slotStack.CanStackWith(CursorStack.Item))
-            {
-                int movedAmount = slotStack.AddAmount(CursorStack.Amount);
-                CursorStack.RemoveAmount(movedAmount);
-                if (CursorStack.IsEmpty)
-                {
-                    CursorStack.Clear();
-                }
-
-                RefreshAfterInventoryChange();
-                NotifyCursorStackChanged();
-                return;
-            }
-
-            InventoryStack swappedStack = slotStack.Clone();
+            InventorySlotItem swappedItem = slotItem.Clone();
             _slots[slotIndex] = CursorStack.Clone();
-            CursorStack = swappedStack;
-            RefreshAfterInventoryChange();
-            NotifyCursorStackChanged();
-        }
-
-        public void HandleSlotRightClick(int slotIndex)
-        {
-            if (!IsValidSlotIndex(slotIndex))
-            {
-                return;
-            }
-
-            InventoryStack slotStack = _slots[slotIndex];
-            if (CursorStack.IsEmpty)
-            {
-                if (slotStack.IsEmpty)
-                {
-                    return;
-                }
-
-                int amountToTake = Mathf.CeilToInt(slotStack.Amount * 0.5f);
-                CursorStack = new InventoryStack(slotStack.Item, amountToTake);
-                slotStack.RemoveAmount(amountToTake);
-                RefreshAfterInventoryChange();
-                NotifyCursorStackChanged();
-                return;
-            }
-
-            if (slotStack.IsEmpty)
-            {
-                _slots[slotIndex] = new InventoryStack(CursorStack.Item, 1);
-                CursorStack.RemoveAmount(1);
-                RefreshAfterInventoryChange();
-                NotifyCursorStackChanged();
-                return;
-            }
-
-            if (!slotStack.CanStackWith(CursorStack.Item) || slotStack.IsFull)
-            {
-                return;
-            }
-
-            slotStack.AddAmount(1);
-            CursorStack.RemoveAmount(1);
+            CursorStack = swappedItem;
             RefreshAfterInventoryChange();
             NotifyCursorStackChanged();
         }
@@ -471,8 +385,8 @@ namespace ProjectPrecipicePT
                 return;
             }
 
-            InventoryStack sourceStack = _slots[slotIndex];
-            if (sourceStack.IsEmpty)
+            InventorySlotItem sourceItem = _slots[slotIndex];
+            if (sourceItem.IsEmpty)
             {
                 return;
             }
@@ -487,63 +401,47 @@ namespace ProjectPrecipicePT
 
         private void MoveSlotIntoRange(int sourceIndex, int targetStart, int targetEnd)
         {
-            InventoryStack sourceStack = _slots[sourceIndex];
-            if (sourceStack.IsEmpty)
+            InventorySlotItem sourceItem = _slots[sourceIndex];
+            if (sourceItem.IsEmpty)
             {
                 return;
             }
 
-            for (int targetIndex = targetStart; targetIndex < targetEnd && !sourceStack.IsEmpty; targetIndex++)
+            for (int targetIndex = targetStart; targetIndex < targetEnd; targetIndex++)
             {
                 if (targetIndex == sourceIndex)
                 {
                     continue;
                 }
 
-                InventoryStack targetStack = _slots[targetIndex];
-                if (!targetStack.CanStackWith(sourceStack.Item) || targetStack.IsFull)
+                InventorySlotItem targetItem = _slots[targetIndex];
+                if (!targetItem.IsEmpty)
                 {
                     continue;
                 }
 
-                int movedAmount = targetStack.AddAmount(sourceStack.Amount);
-                sourceStack.RemoveAmount(movedAmount);
-            }
-
-            for (int targetIndex = targetStart; targetIndex < targetEnd && !sourceStack.IsEmpty; targetIndex++)
-            {
-                if (targetIndex == sourceIndex)
-                {
-                    continue;
-                }
-
-                InventoryStack targetStack = _slots[targetIndex];
-                if (!targetStack.IsEmpty)
-                {
-                    continue;
-                }
-
-                targetStack.Set(sourceStack.Item, sourceStack.Amount);
-                sourceStack.Clear();
+                targetItem.Set(sourceItem.Item);
+                sourceItem.Clear();
+                return;
             }
         }
-
 
         #endregion
 
         private void SelectHotbarSlot(int hotbarSlotIndex)
         {
-            if(HotbarSlotCount == 0)
+            if (HotbarSlotCount == 0)
             {
                 SelectedHotbarSlotIndex = 0;
                 UpdateSelectedHotbarStack();
                 return;
             }
-            
+
             int newIndex = Mathf.Clamp(hotbarSlotIndex, 0, HotbarSlotCount - 1);
-            
-            // Prevent redundant updates if the slot is already selected
-            if (newIndex == SelectedHotbarSlotIndex) return;
+            if (newIndex == SelectedHotbarSlotIndex)
+            {
+                return;
+            }
 
             SelectedHotbarSlotIndex = newIndex;
             UpdateSelectedHotbarStack();
@@ -554,17 +452,17 @@ namespace ProjectPrecipicePT
         {
             if (!IsValidSlotIndex(SelectedHotbarSlotIndex))
             {
-                SelectedHotbarStack = new InventoryStack();
+                SelectedHotbarStack = new InventorySlotItem();
                 Debug.Log($"Invalid hotbar slot index: {SelectedHotbarSlotIndex}");
                 return;
             }
-            
+
             SelectedHotbarStack = _slots[SelectedHotbarSlotIndex].Clone();
         }
 
-        public InventoryStack GetSlot(int slotIndex)
+        public InventorySlotItem GetSlot(int slotIndex)
         {
-            return IsValidSlotIndex(slotIndex) ? _slots[slotIndex] : new InventoryStack();
+            return IsValidSlotIndex(slotIndex) ? _slots[slotIndex] : new InventorySlotItem();
         }
 
         private bool IsValidSlotIndex(int slotIndex)
@@ -575,10 +473,10 @@ namespace ProjectPrecipicePT
         private void InitializeSlots()
         {
             _slots.Clear();
-            
+
             for (int i = 0; i < _slotCount; i++)
             {
-                _slots.Add(new InventoryStack());
+                _slots.Add(new InventorySlotItem());
             }
         }
     }
