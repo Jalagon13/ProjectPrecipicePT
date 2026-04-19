@@ -32,13 +32,13 @@ namespace ProjectPrecipicePT
         [SerializeField] private List<InventorySlotItem> _startingItems = new();
 
         private readonly List<InventorySlotItem> _slots = new();
+        public List<InventorySlotItem> Slots => _slots;
 
         public InventorySlotItem CursorStack { get; private set; } = new();
         public InventorySlotItem SelectedHotbarStack { get; private set; } = new();
 
         public int SelectedHotbarSlotIndex { get; private set; } = -1;
         public int HotbarSlotCount => Mathf.Min(_hotbarSlotCount, _slots.Count);
-        public int SlotCount => _slots.Count;
         public bool IsInventoryOpen { get; private set; }
         public bool IsFull => !_slots.Exists(slot => slot.IsEmpty);
 

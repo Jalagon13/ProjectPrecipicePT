@@ -83,7 +83,7 @@ namespace ProjectPrecipicePT
         private void BuildSlots()
         {
             CreateSlotRange(0, InventoryManager.Instance.HotbarSlotCount, _hotbarPanel, true);
-            CreateSlotRange(InventoryManager.Instance.HotbarSlotCount, InventoryManager.Instance.SlotCount, _inventoryPanel, false);
+            CreateSlotRange(InventoryManager.Instance.HotbarSlotCount, InventoryManager.Instance.Slots.Count, _inventoryPanel, false);
         }
 
         private void CreateSlotRange(int startIndex, int endIndex, RectTransform parent, bool isHotbarSlot)
