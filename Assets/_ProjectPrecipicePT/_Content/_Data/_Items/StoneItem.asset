@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: StoneItem
   m_EditorClassIdentifier: Assembly-CSharp::ProjectPrecipicePT.ItemSO
   _itemName: Stone
-  _itemWeight: 5
-  _itemDescription: 
+  _itemWeight: 1
+  _itemDescription: 'Stony stone ston '
   _inventoryIcon: {fileID: 21300002, guid: 358b5d9f23bc9413e87c9948acc67ee1, type: 3}
-  _worldPrefab: {fileID: 0}
+  _worldItemPrefab: {fileID: 4108480406328591395, guid: 12b0a03c74ae141f9b70a9b4ae7c8db4, type: 3}

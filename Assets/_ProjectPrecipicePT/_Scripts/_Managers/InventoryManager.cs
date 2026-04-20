@@ -369,6 +369,17 @@ namespace ProjectPrecipicePT
             NotifyCursorStackChanged();
         }
 
+        public void ClearCursorStack()
+        {
+            if (CursorStack.IsEmpty)
+            {
+                return;
+            }
+
+            CursorStack.Clear();
+            NotifyCursorStackChanged();
+        }
+
         private void NotifyCursorStackChanged()
         {
             if (CursorStack.IsEmpty)

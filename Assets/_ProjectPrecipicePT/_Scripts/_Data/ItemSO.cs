@@ -20,12 +20,12 @@ namespace ProjectPrecipicePT
         private Sprite _inventoryIcon;
         
         [SerializeField, Tooltip("Prefab used when this item exists as a physical object in the world.")]
-        private GameObject _worldPrefab;
+        private WorldItem _worldItemPrefab;
 
         public string ItemName => _itemName;
         public int ItemWeight => Mathf.Max(0, _itemWeight);
         public string ItemDescription => _itemDescription;
         public Sprite InventoryIcon => _inventoryIcon;
-        public GameObject WorldPrefab => _worldPrefab;
+        public WorldItem WorldItemPrefab => _worldItemPrefab;
     }
 }
