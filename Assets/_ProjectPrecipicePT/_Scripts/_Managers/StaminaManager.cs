@@ -6,6 +6,7 @@ namespace ProjectPrecipicePT
     public class StaminaManager : MonoBehaviour
     {
         public static StaminaManager Instance { get; private set; }
+        
 
         public event Action<int, int, int, int> OnStaminaChanged;
 
