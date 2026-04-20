@@ -15,6 +15,7 @@ namespace ProjectPrecipicePT
         public event Action OnInventoryChanged;
         public event Action<bool> OnInventoryOpenChanged;
         public event Action<InventorySlotItem> OnCursorStackChanged;
+        public event Action<ItemSO, int> OnItemPickup;
 
         private const int _minimumHotbarSlotCount = 1;
         private const int _minimumTotalSlotCount = 8;
@@ -211,6 +212,12 @@ namespace ProjectPrecipicePT
 
             int remainingAmount = amount;
             FillEmptySlots(item, ref remainingAmount);
+
+            int amountAdded = amount - remainingAmount;
+            if (amountAdded > 0)
+            {
+                OnItemPickup?.Invoke(item, amountAdded);
+            }
 
             if (remainingAmount < amount)
             {
