@@ -21,16 +21,17 @@ namespace ProjectPrecipicePT
         
         private int _currentMaxStamina;
         private int _currentStaminaLimit;
-        private float _currentStamina;
+        private int _currentStamina;
+        private float _staminaFraction;
         private int _currentCarryWeight;
         private float _regenResumeTime;
         private bool _wasSprintingLastFrame;
 
         public int CurrentMaxStamina => _currentMaxStamina;
         public int CurrentStaminaLimit => _currentStaminaLimit;
-        public int CurrentStamina => Mathf.FloorToInt(_currentStamina);
+        public int CurrentStamina => _currentStamina;
         public int CurrentCarryWeight => _currentCarryWeight;
-        public bool HasStaminaForClimbing => _currentStamina > 0.001f;
+        public bool HasStaminaForClimbing => _currentStamina > 0;
 
         private void Awake()
         {
@@ -38,6 +39,7 @@ namespace ProjectPrecipicePT
             _currentMaxStamina = _startingMaxStaminaAmount;
             _currentStaminaLimit = _currentMaxStamina;
             _currentStamina = _currentMaxStamina;
+            _staminaFraction = 0f;
             PublishStaminaChanged("Initialized");
         }
 
@@ -81,12 +83,12 @@ namespace ProjectPrecipicePT
         {
             if (CanSpend(_jumpStaminaCost))
             {
-                ConsumeStamina(_jumpStaminaCost, $"{source} stamina cost");
+                ConsumeStaminaInt(_jumpStaminaCost, $"{source} stamina cost");
                 BeginRecoveryCooldown($"{source} used stamina");
                 return true;
             }
 
-            Debug.Log($"StaminaManager: blocked {source} because stamina is too low. Current {Mathf.FloorToInt(_currentStamina)}/{_currentStaminaLimit}, required {_jumpStaminaCost}.");
+            Debug.Log($"StaminaManager: blocked {source} because stamina is too low. Current {_currentStamina}/{_currentStaminaLimit}, required {_jumpStaminaCost}.");
             return false;
         }
 
@@ -118,7 +120,8 @@ namespace ProjectPrecipicePT
             float staminaCost = _sprintStaminaDrainRate * Mathf.Max(0f, deltaTime);
             if (staminaCost > 0f)
             {
-                ConsumeStamina(staminaCost, "Sprint drain");
+                ConsumeStaminaFraction(staminaCost, "Sprint drain");
+                _regenResumeTime = Mathf.Max(_regenResumeTime, Time.time + _staminaRegenDelay);
             }
 
             bool canKeepSprinting = HasStaminaForClimbing;
@@ -157,7 +160,8 @@ namespace ProjectPrecipicePT
             float staminaCost = _climbStaminaDrainRate * Mathf.Max(0f, deltaTime);
             if (staminaCost > 0f)
             {
-                ConsumeStamina(staminaCost, "Climb drain");
+                ConsumeStaminaFraction(staminaCost, "Climb drain");
+                _regenResumeTime = Mathf.Max(_regenResumeTime, Time.time + _staminaRegenDelay);
             }
 
             if (HasStaminaForClimbing)
@@ -176,9 +180,9 @@ namespace ProjectPrecipicePT
             Debug.Log($"StaminaManager: recovery cooldown started for {reason}. Regen resumes in {_staminaRegenDelay:0.##} seconds.");
         }
 
-        private bool CanSpend(float amount)
+        private bool CanSpend(int amount)
         {
-            return amount <= 0f || _currentStamina >= amount;
+            return amount <= 0 || _currentStamina >= amount;
         }
 
         private void TickRegeneration()
@@ -189,12 +193,7 @@ namespace ProjectPrecipicePT
             }
 
             float regenAmount = _staminaRegenPerSecond * Time.deltaTime;
-            if (regenAmount <= 0f)
-            {
-                return;
-            }
-
-            SetCurrentStamina(_currentStamina + regenAmount, "Regenerating stamina");
+            AddStaminaFraction(regenAmount, "Regenerating stamina");
         }
 
         private void RefreshCarryWeight(string reason)
@@ -228,6 +227,7 @@ namespace ProjectPrecipicePT
             if (_currentStamina > _currentStaminaLimit)
             {
                 _currentStamina = _currentStaminaLimit;
+                _staminaFraction = 0f;
             }
 
             if (previousLimit != _currentStaminaLimit)
@@ -238,32 +238,60 @@ namespace ProjectPrecipicePT
             PublishStaminaChanged($"{reason}. Carry weight {_currentCarryWeight}");
         }
 
-        private void ConsumeStamina(float amount, string reason)
+        private void ConsumeStaminaInt(int amount, string reason)
         {
-            if (amount <= 0f)
-            {
-                return;
-            }
-
+            if (amount <= 0) return;
             SetCurrentStamina(_currentStamina - amount, reason);
         }
 
-        private void SetCurrentStamina(float value, string reason)
+        private void ConsumeStaminaFraction(float amount, string reason)
         {
-            float clampedValue = Mathf.Clamp(value, 0f, _currentStaminaLimit);
-            if (Mathf.Approximately(clampedValue, _currentStamina))
+            if (amount <= 0f) return;
+
+            _staminaFraction -= amount;
+            if (_staminaFraction <= -1f)
+            {
+                int intDrain = Mathf.FloorToInt(-_staminaFraction);
+                _staminaFraction += intDrain;
+                SetCurrentStamina(_currentStamina - intDrain, reason);
+            }
+        }
+
+        private void AddStaminaFraction(float amount, string reason)
+        {
+            if (amount <= 0f) return;
+
+            _staminaFraction += amount;
+            if (_staminaFraction >= 1f)
+            {
+                int intAdd = Mathf.FloorToInt(_staminaFraction);
+                _staminaFraction -= intAdd;
+                SetCurrentStamina(_currentStamina + intAdd, reason);
+            }
+        }
+
+        private void SetCurrentStamina(int value, string reason)
+        {
+            int clampedValue = Mathf.Clamp(value, 0, _currentStaminaLimit);
+            if (clampedValue == _currentStamina)
             {
                 return;
             }
 
             _currentStamina = clampedValue;
+            
+            if (_currentStamina <= 0 || _currentStamina >= _currentStaminaLimit)
+            {
+                _staminaFraction = 0f;
+            }
+
             PublishStaminaChanged(reason);
         }
 
         private void PublishStaminaChanged(string reason)
         {
-            Debug.Log($"StaminaManager: {reason}. Current {Mathf.FloorToInt(_currentStamina)}/{_currentStaminaLimit}, base max {_currentMaxStamina}, carry weight {_currentCarryWeight}.");
-            OnStaminaChanged?.Invoke(Mathf.FloorToInt(_currentStamina), _currentStaminaLimit, _currentMaxStamina, _currentCarryWeight);
+            Debug.Log($"StaminaManager: {reason}. Current {_currentStamina}/{_currentStaminaLimit}, base max {_currentMaxStamina}, carry weight {_currentCarryWeight}.");
+            OnStaminaChanged?.Invoke(_currentStamina, _currentStaminaLimit, _currentMaxStamina, _currentCarryWeight);
         }
     }
 }
