@@ -127,6 +127,12 @@ namespace ProjectPrecipicePT
                 return false;
             }
 
+            if (StaminaManager.Instance != null && !StaminaManager.Instance.HasStaminaForClimbing)
+            {
+                Debug.Log("PlayerClimbingState: cannot begin climbing because stamina is depleted.");
+                return false;
+            }
+
             Vector3 searchDirection = GetAttachSearchDirection();
             if (!TryGetClosestClimbHit(_player.GetBodyCenter(_player.PlayerTransform.position), searchDirection, _climbAttachRange, out RaycastHit hit))
             {
@@ -151,6 +157,12 @@ namespace ProjectPrecipicePT
         {
             if (TryExitWhenClimbReleased())
             {
+                return;
+            }
+
+            if (StaminaManager.Instance != null && !StaminaManager.Instance.TrySustainClimbing(Time.deltaTime))
+            {
+                ExitClimbing();
                 return;
             }
 
@@ -280,6 +292,11 @@ namespace ProjectPrecipicePT
                 return false;
             }
 
+            if (StaminaManager.Instance != null && !StaminaManager.Instance.TryConsumeJumpStamina("Climb jump"))
+            {
+                return false;
+            }
+
             _player.ClimbJumpState.Begin(jumpDirection);
             return true;
         }
@@ -330,6 +347,7 @@ namespace ProjectPrecipicePT
             float fallSpeed = Mathf.Max(0f, -_locomotionState.VerticalVelocity);
             bool shouldSlideOnGrab = !_player.CharacterController.isGrounded && fallSpeed > 0.01f;
 
+            StaminaManager.Instance?.ForceEndSprint("Climb started");
             _locomotionState.ResetVerticalVelocity();
             _player.SetState(Player.PlayerStateType.Climbing);
             _player.ResetClimbCamera();
@@ -365,6 +383,7 @@ namespace ProjectPrecipicePT
             _player.SnapDetachFacingToCurrentLook();
             _player.BeginModelUprightBlend(_climbDetachDuration);
             _player.SetState(Player.PlayerStateType.Locomotion);
+            StaminaManager.Instance?.BeginRecoveryCooldown("Climbing ended");
         }
 
         public void ExitToLocomotion()

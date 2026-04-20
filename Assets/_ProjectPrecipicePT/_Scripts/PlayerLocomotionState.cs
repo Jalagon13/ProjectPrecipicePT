@@ -124,6 +124,11 @@ namespace ProjectPrecipicePT
                 return;
             }
 
+            if (StaminaManager.Instance != null && !StaminaManager.Instance.TryConsumeJumpStamina("Ground jump"))
+            {
+                return;
+            }
+
             _verticalVelocity = Mathf.Sqrt(_jumpHeight * 2f * _gravity);
             _nextJumpTime = Time.time + _jumpCooldown;
         }
@@ -135,13 +140,16 @@ namespace ProjectPrecipicePT
 
         private bool CanStartJump()
         {
-            return GameInput.Instance.IsJumpPressedThisFrame() && Time.time >= _nextJumpTime;
+            return GameInput.Instance.IsJumpPressedThisFrame() && Time.time >= _nextJumpTime && StaminaManager.Instance.CanStartJump();
         }
 
         private float GetMoveSpeed(Vector2 moveInput)
         {
             bool isTryingToMove = moveInput.sqrMagnitude > MovementThresholdSqr;
-            return GameInput.Instance.IsSprintPressed() && isTryingToMove
+            bool canSprint = StaminaManager.Instance == null ||
+                             StaminaManager.Instance.TrySustainSprint(GameInput.Instance.IsSprintPressed() && isTryingToMove, Time.deltaTime);
+
+            return canSprint
                 ? _sprintSpeed
                 : _walkSpeed;
         }

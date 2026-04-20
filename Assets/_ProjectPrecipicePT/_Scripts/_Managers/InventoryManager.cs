@@ -39,6 +39,7 @@ namespace ProjectPrecipicePT
 
         public int SelectedHotbarSlotIndex { get; private set; } = -1;
         public int HotbarSlotCount => Mathf.Min(_hotbarSlotCount, _slots.Count);
+        public int SlotCount => _slots.Count;
         public bool IsInventoryOpen { get; private set; }
         public bool IsFull => !_slots.Exists(slot => slot.IsEmpty);
 

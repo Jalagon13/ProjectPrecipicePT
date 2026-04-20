@@ -33,6 +33,7 @@ namespace ProjectPrecipicePT
             _timer = 0f;
             _nextAvailableJumpTime = Time.time + _climbJumpCooldown;
             _initialDashSpeed = (2f * _climbJumpDistance) / Mathf.Max(0.01f, _climbJumpDuration);
+            StaminaManager.Instance?.ForceEndSprint("Climb jump started");
             _player.SetState(Player.PlayerStateType.ClimbJump);
         }
 

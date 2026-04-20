@@ -67,5 +67,8 @@
         "*.sln": "*.csproj",
         "*.slnx": "*.csproj"
     },
-    "dotnet.defaultSolution": "ProjectPrecipicePT.slnx"
+    "dotnet.defaultSolution": "ProjectPrecipicePT.slnx",
+    "dotrush.roslyn.projectOrSolutionFiles": [
+        "/Users/jalagon/Projects/ProjectPrecipicePT/ProjectPrecipicePT.slnx"
+    ]
 }

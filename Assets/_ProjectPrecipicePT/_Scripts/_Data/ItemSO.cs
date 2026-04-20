@@ -9,7 +9,7 @@ namespace ProjectPrecipicePT
         [SerializeField, Tooltip("Display name shown anywhere this item is referenced in UI.")]
         private string _itemName;
 
-        [SerializeField, Tooltip("How much the item weighs (arbitrary weight unit)")]
+        [SerializeField, Min(0f), Tooltip("How much stamina capacity this item removes while it is carried.")]
         private int _itemWeight = 1;
 
         [SerializeField, TextArea, Tooltip("Longer description for the item.")]
@@ -23,6 +23,7 @@ namespace ProjectPrecipicePT
         private GameObject _worldPrefab;
 
         public string ItemName => _itemName;
+        public int ItemWeight => Mathf.Max(0, _itemWeight);
         public string ItemDescription => _itemDescription;
         public Sprite InventoryIcon => _inventoryIcon;
         public GameObject WorldPrefab => _worldPrefab;
