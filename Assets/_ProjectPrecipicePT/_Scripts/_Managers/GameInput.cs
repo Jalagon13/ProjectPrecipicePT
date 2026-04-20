@@ -10,12 +10,15 @@ namespace ProjectPrecipicePT
 
         public event EventHandler<InputAction.CallbackContext> OnMove;
         public event EventHandler<InputAction.CallbackContext> OnToggleInventory;
+        public event EventHandler<InputAction.CallbackContext> OnInteract;
 
         public event EventHandler<InputAction.CallbackContext> OnScrollWheel;
         public event EventHandler<InputAction.CallbackContext> OnSelectSlot;
 
         private PlayerInput _playerInput;
         private bool _isGameplayInputBlocked;
+
+        public bool IsHoldingDownInteract { get; private set; }
 
         private void Awake()
         {
@@ -34,6 +37,7 @@ namespace ProjectPrecipicePT
             _playerInput.Player.Move.performed += GameInput_OnMove;
             _playerInput.Player.Move.canceled += GameInput_OnMove;
             _playerInput.Player.ToggleInventory.started += GameInput_OnToggleInventory;
+            _playerInput.Player.Interact.started += GameInput_OnInteract;
             
             _playerInput.UI.ScrollWheel.performed += PlayerInput_OnScrollWheel;
             _playerInput.UI.SelectSlot.started += PlayerInput_OnSelectSlot;
@@ -50,6 +54,7 @@ namespace ProjectPrecipicePT
             _playerInput.Player.Move.performed -= GameInput_OnMove;
             _playerInput.Player.Move.canceled -= GameInput_OnMove;
             _playerInput.Player.ToggleInventory.started -= GameInput_OnToggleInventory;
+            _playerInput.Player.Interact.started -= GameInput_OnInteract;
 
             _playerInput.UI.ScrollWheel.performed -= PlayerInput_OnScrollWheel;
             _playerInput.UI.SelectSlot.started -= PlayerInput_OnSelectSlot;
@@ -57,6 +62,12 @@ namespace ProjectPrecipicePT
 
             _playerInput.Disable();
             _playerInput.Dispose();
+        }
+
+        private void GameInput_OnInteract(InputAction.CallbackContext context)
+        {
+            IsHoldingDownInteract = context.ReadValueAsButton();
+            OnInteract?.Invoke(this, context);  
         }
 
         private void PlayerInput_OnScrollWheel(InputAction.CallbackContext context)
