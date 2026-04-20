@@ -16,6 +16,7 @@ namespace ProjectPrecipicePT
         [SerializeField] private RectTransform _inventoryPanel;
         [SerializeField] private RectTransform _inventoryPivot;
         [SerializeField] private Image _inventoryBackground;
+        [SerializeField] private int _inventoryDownOffset = 300;
 
 
         [Header("Cursor Inventory UI")]
@@ -30,6 +31,17 @@ namespace ProjectPrecipicePT
         {
             _inventoryPivotPosition = _inventoryPivot.anchoredPosition;
         }
+
+        private void Start()
+        {
+            BuildSlots();
+            RefreshAll();
+            
+            InventoryManager.Instance.OnInventoryChanged += RefreshAll;
+            InventoryManager.Instance.OnSelectedHotbarSlotChanged += HandleSelectedHotbarChanged;
+            InventoryManager.Instance.OnInventoryOpenChanged += SetInventoryVisible;
+            InventoryManager.Instance.OnCursorStackChanged += RefreshDragItem;
+        }
         
         private void OnDestroy()
         {
@@ -39,25 +51,9 @@ namespace ProjectPrecipicePT
             InventoryManager.Instance.OnCursorStackChanged -= RefreshDragItem;
         }
         
-        private void Start()
-        {
-            Initialize();
-        }
-        
         private void Update()
         {
             UpdateDragItemPosition();
-        }
-        
-        private void Initialize()
-        {
-            BuildSlots();
-            RefreshAll();
-            
-            InventoryManager.Instance.OnInventoryChanged += RefreshAll;
-            InventoryManager.Instance.OnSelectedHotbarSlotChanged += HandleSelectedHotbarChanged;
-            InventoryManager.Instance.OnInventoryOpenChanged += SetInventoryVisible;
-            InventoryManager.Instance.OnCursorStackChanged += RefreshDragItem;
         }
 
         private void RefreshDragItem(InventorySlotItem cursorStack)
@@ -119,7 +115,7 @@ namespace ProjectPrecipicePT
         {
             _inventoryPanel.gameObject.SetActive(isVisible);
             _inventoryBackground.gameObject.SetActive(isVisible);
-            _inventoryPivot.anchoredPosition = isVisible ? Vector2.down * 150 : _inventoryPivotPosition;
+            _inventoryPivot.anchoredPosition = isVisible ? Vector2.down * _inventoryDownOffset : _inventoryPivotPosition;
 
             if (!isVisible)
             {

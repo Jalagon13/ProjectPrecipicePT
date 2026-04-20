@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d3efab10b30e142c296a8a848f0d4791, type: 3}
+  m_Name: TestRecipe1
+  m_EditorClassIdentifier: Assembly-CSharp::ProjectPrecipicePT.RecipeSO
+  <OutputItem>k__BackingField: {fileID: 11400000, guid: 4bd46d7bf907e4dcab6a900b6ee7bbfa, type: 2}
+  <OutputAmount>k__BackingField: 1
+  <Requirements>k__BackingField:
+  - <Item>k__BackingField: {fileID: 11400000, guid: 81b4f393c5821440aa8b28e817e5c4f3, type: 2}
+    <Amount>k__BackingField: 2
