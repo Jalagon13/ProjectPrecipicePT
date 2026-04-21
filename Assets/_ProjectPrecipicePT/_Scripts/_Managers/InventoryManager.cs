@@ -54,8 +54,12 @@ namespace ProjectPrecipicePT
 
         private IEnumerator Start()
         {
-            SubscribeToInput();
             SelectHotbarSlot(0);
+
+            GameInput.Instance.OnSelectSlot += GameInput_OnSelectSlot;
+            GameInput.Instance.OnScrollWheel += GameInput_OnScrollWheel;
+            GameInput.Instance.OnToggleInventory += GameInput_OnToggleInventory;
+            HealthManager.Instance.OnDeath += HandleDeath;
 
             yield return null;
 
@@ -72,24 +76,13 @@ namespace ProjectPrecipicePT
 
         private void OnDestroy()
         {
-            UnSubscribeFromInput();
-        }
-
-        #region Input
-
-        private void SubscribeToInput()
-        {
-            GameInput.Instance.OnSelectSlot += GameInput_OnSelectSlot;
-            GameInput.Instance.OnScrollWheel += GameInput_OnScrollWheel;
-            GameInput.Instance.OnToggleInventory += GameInput_OnToggleInventory;
-        }
-
-        private void UnSubscribeFromInput()
-        {
             GameInput.Instance.OnSelectSlot -= GameInput_OnSelectSlot;
             GameInput.Instance.OnScrollWheel -= GameInput_OnScrollWheel;
             GameInput.Instance.OnToggleInventory -= GameInput_OnToggleInventory;
+            HealthManager.Instance.OnDeath -= HandleDeath;
         }
+
+        #region Input
 
         private void GameInput_OnToggleInventory(object sender, InputAction.CallbackContext e)
         {
@@ -142,6 +135,16 @@ namespace ProjectPrecipicePT
             Cursor.visible = false;
 
             GameInput.Instance.SetGameplayInputBlocked(false);
+        }
+
+        private void HandleDeath()
+        {
+            if (_craftingMenuUI != null && _craftingMenuUI.CraftItemPanelUI != null)
+            {
+                _craftingMenuUI.CraftItemPanelUI.CancelCrafting();
+            }
+
+            CloseInventory(force: true);
         }
 
         private bool CanOpenInventory()

@@ -162,6 +162,23 @@ namespace ProjectPrecipicePT
             UpdateCraftButtonOverlay();
         }
 
+        public void CancelCrafting()
+        {
+            if (State != CraftItemPanelState.Crafting) return;
+
+            if (_craftingTimer != null)
+            {
+                _craftingTimer.OnTimerEnd -= HandleCraftingComplete;
+                _craftingTimer = null;
+            }
+
+            State = CraftItemPanelState.Idle;
+            _craftButtonProgressBar.fillAmount = 0f;
+            _craftButtonProgressBar.enabled = false;
+            _craftButtonText.text = _idleCraftButtonText;
+            UpdateCraftButtonOverlay();
+        }
+
 
         private void UpdateCraftButtonOverlay()
         {

@@ -7,6 +7,7 @@ namespace ProjectPrecipicePT
     [RequireComponent(typeof(PlayerClimbingState))]
     [RequireComponent(typeof(PlayerClimbJumpState))]
     [RequireComponent(typeof(PlayerLedgeClimbState))]
+    [RequireComponent(typeof(PlayerDeathState))]
     public class Player : MonoBehaviour
     {
         public static Player Instance { get; private set; }
@@ -18,7 +19,8 @@ namespace ProjectPrecipicePT
             Locomotion,
             Climbing,
             ClimbJump,
-            LedgeClimb
+            LedgeClimb,
+            Dead
         }
 
         private CharacterController _characterController;
@@ -29,6 +31,7 @@ namespace ProjectPrecipicePT
         private PlayerClimbingState _climbingState;
         private PlayerClimbJumpState _climbJumpState;
         private PlayerLedgeClimbState _ledgeClimbState;
+        private PlayerDeathState _deathState;
         private PlayerStateType _state;
         private float _pitch;
         private float _climbCameraYaw;
@@ -36,6 +39,7 @@ namespace ProjectPrecipicePT
         private Quaternion _modelBlendStartRotation;
         private float _modelBlendTimer;
         private float _modelBlendDuration;
+        private Vector3 _respawnPoint;
 
         public CharacterController CharacterController => _characterController;
         public Transform PlayerTransform => transform;
@@ -46,6 +50,7 @@ namespace ProjectPrecipicePT
         public PlayerClimbingState ClimbingState => _climbingState;
         public PlayerClimbJumpState ClimbJumpState => _climbJumpState;
         public PlayerLedgeClimbState LedgeClimbState => _ledgeClimbState;
+        public PlayerDeathState DeathState => _deathState;
 
         private void Awake()
         {
@@ -55,6 +60,26 @@ namespace ProjectPrecipicePT
             CacheReferences();
             SetupCameraHierarchy();
             InitializePitchFromCamera();
+
+            _respawnPoint = transform.position;
+        }
+
+        private void Start()
+        {
+            if (HealthManager.Instance != null)
+            {
+                HealthManager.Instance.OnDeath += Die;
+                HealthManager.Instance.OnRespawn += HandleRespawn;
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (HealthManager.Instance != null)
+            {
+                HealthManager.Instance.OnDeath -= Die;
+                HealthManager.Instance.OnRespawn -= HandleRespawn;
+            }
         }
 
         private void OnEnable()
@@ -74,9 +99,12 @@ namespace ProjectPrecipicePT
                 return;
             }
 
-            if (!InventoryManager.Instance.IsInventoryOpen)
+            if (_state != PlayerStateType.Dead)
             {
-                HandleLookIfAllowed();
+                if (!InventoryManager.Instance.IsInventoryOpen)
+                {
+                    HandleLookIfAllowed();
+                }
             }
             
             TickModelUprightBlend();
@@ -86,6 +114,22 @@ namespace ProjectPrecipicePT
         public void SetState(PlayerStateType state)
         {
             _state = state;
+        }
+
+        public void Die()
+        {
+            SetState(PlayerStateType.Dead);
+            SetCursorLocked(false);
+        }
+
+        private void HandleRespawn()
+        {
+            _characterController.enabled = false;
+            transform.position = _respawnPoint;
+            _characterController.enabled = true;
+            
+            SetState(PlayerStateType.Locomotion);
+            SetCursorLocked(true);
         }
 
         public void ResetClimbCamera()
