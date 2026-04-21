@@ -148,12 +148,12 @@ namespace ProjectPrecipicePT
         {
             _craftingTimer.OnTimerEnd -= HandleCraftingComplete;
 
-            InventoryManager.Instance.AddItem(_currentRecipe.OutputItem, _currentRecipe.OutputAmount);
-            
             foreach (var item in _currentRecipe.Requirements)
             {
                 InventoryManager.Instance.RemoveItem(item.Item, item.Amount);
             }
+            
+            InventoryManager.Instance.AddItem(_currentRecipe.OutputItem, _currentRecipe.OutputAmount);
 
             State = CraftItemPanelState.Idle;
             _craftButtonProgressBar.fillAmount = 0f;
