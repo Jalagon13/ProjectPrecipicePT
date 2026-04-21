@@ -61,6 +61,11 @@ namespace ProjectPrecipicePT
             GameInput.Instance.OnToggleInventory += GameInput_OnToggleInventory;
             HealthManager.Instance.OnDeath += HandleDeath;
 
+            OnInventoryChanged += CalculateAndSendWeight;
+            OnCursorStackChanged += CalculateAndSendWeight;
+
+            CalculateAndSendWeight();
+
             yield return null;
 
             CloseInventory(force: true);
@@ -80,6 +85,33 @@ namespace ProjectPrecipicePT
             GameInput.Instance.OnScrollWheel -= GameInput_OnScrollWheel;
             GameInput.Instance.OnToggleInventory -= GameInput_OnToggleInventory;
             HealthManager.Instance.OnDeath -= HandleDeath;
+
+            OnInventoryChanged -= CalculateAndSendWeight;
+            OnCursorStackChanged -= CalculateAndSendWeight;
+        }
+
+        private void CalculateAndSendWeight()
+        {
+            if (StaminaManager.Instance == null) return;
+
+            int carryWeight = 0;
+            foreach (InventorySlotItem slot in _slots)
+            {
+                if (slot == null || slot.IsEmpty || slot.Item == null) continue;
+                carryWeight += slot.Item.ItemWeight;
+            }
+
+            if (CursorStack != null && !CursorStack.IsEmpty && CursorStack.Item != null)
+            {
+                carryWeight += CursorStack.Item.ItemWeight;
+            }
+
+            StaminaManager.Instance.SetIntrusionAmount(StaminaIntrusionType.Weight, carryWeight, "Inventory weight update");
+        }
+
+        private void CalculateAndSendWeight(InventorySlotItem _)
+        {
+            CalculateAndSendWeight();
         }
 
         #region Input

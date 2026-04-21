@@ -3,12 +3,28 @@ using UnityEngine;
 
 namespace ProjectPrecipicePT
 {
+    public enum StaminaIntrusionType
+    {
+        Weight,
+        Hunger,
+        Fatigue,
+        Radiation
+    }
+
+    [Serializable]
+    public class StaminaIntrusion
+    {
+        public StaminaIntrusionType Type;
+        public int Amount;
+    }
+
     public class StaminaManager : MonoBehaviour
     {
         public static StaminaManager Instance { get; private set; }
         
 
-        public event Action<int, int, int, int> OnStaminaChanged;
+        public event Action<int, int, int> OnStaminaChanged;
+        public event Action OnIntrusionsChanged;
 
         [Header("Stamina Pool")]
         [SerializeField, Min(1)] private int _startingMaxStaminaAmount = 100;
@@ -24,14 +40,14 @@ namespace ProjectPrecipicePT
         private int _currentStaminaLimit;
         private int _currentStamina;
         private float _staminaFraction;
-        private int _currentCarryWeight;
+        private System.Collections.Generic.List<StaminaIntrusion> _intrusions = new();
         private float _regenResumeTime;
         private bool _wasSprintingLastFrame;
 
         public int CurrentMaxStamina => _currentMaxStamina;
         public int CurrentStaminaLimit => _currentStaminaLimit;
         public int CurrentStamina => _currentStamina;
-        public int CurrentCarryWeight => _currentCarryWeight;
+        public System.Collections.Generic.IReadOnlyList<StaminaIntrusion> Intrusions => _intrusions;
         public bool HasStaminaForClimbing => _currentStamina > 0;
 
         private void Awake()
@@ -44,35 +60,9 @@ namespace ProjectPrecipicePT
             PublishStaminaChanged("Initialized");
         }
 
-        private void Start()
-        {
-            InventoryManager.Instance.OnInventoryChanged += HandleInventoryChanged;
-            InventoryManager.Instance.OnCursorStackChanged += HandleCursorStackChanged;
-            RefreshCarryWeight("Initial inventory sync");
-        }
-
         private void Update()
         {
             TickRegeneration();
-        }
-
-        private void OnDestroy()
-        {
-            if (InventoryManager.Instance != null)
-            {
-                InventoryManager.Instance.OnInventoryChanged -= HandleInventoryChanged;
-                InventoryManager.Instance.OnCursorStackChanged -= HandleCursorStackChanged;
-            }
-        }
-
-        private void HandleInventoryChanged()
-        {
-            RefreshCarryWeight("Inventory changed");
-        }
-
-        private void HandleCursorStackChanged(InventorySlotItem _)
-        {
-            RefreshCarryWeight("Cursor item changed");
         }
 
         public bool CanStartJump()
@@ -197,33 +187,64 @@ namespace ProjectPrecipicePT
             AddStaminaFraction(regenAmount, "Regenerating stamina");
         }
 
-        private void RefreshCarryWeight(string reason)
+        // RefreshCarryWeight removed and delegated to InventoryManager
+
+        public int SetIntrusionAmount(StaminaIntrusionType type, int amount, string reason = "")
         {
-            int carryWeight = 0;
+            amount = Mathf.Max(0, amount);
 
-            if (InventoryManager.Instance != null)
+            // Prevent intrusions from exceeding the max stamina pool
+            int otherIntrusionsTotal = 0;
+            foreach (var intrusion in _intrusions)
             {
-                foreach (InventorySlotItem slot in InventoryManager.Instance.Slots)
+                if (intrusion.Type != type)
                 {
-                    if (slot == null || slot.IsEmpty || slot.Item == null)
-                    {
-                        continue;
-                    }
-
-                    carryWeight += slot.Item.ItemWeight;
+                    otherIntrusionsTotal += intrusion.Amount;
                 }
+            }
+            
+            int maxAllowedAmount = Mathf.Max(0, _startingMaxStaminaAmount - otherIntrusionsTotal);
+            amount = Mathf.Min(amount, maxAllowedAmount);
 
-                InventorySlotItem cursorItem = InventoryManager.Instance.CursorStack;
-                if (cursorItem != null && !cursorItem.IsEmpty && cursorItem.Item != null)
+            var existing = _intrusions.Find(x => x.Type == type);
+
+            if (amount == 0)
+            {
+                if (existing != null)
                 {
-                    carryWeight += cursorItem.Item.ItemWeight;
+                    _intrusions.Remove(existing);
+                }
+            }
+            else
+            {
+                if (existing != null)
+                {
+                    existing.Amount = amount;
+                }
+                else
+                {
+                    _intrusions.Add(new StaminaIntrusion { Type = type, Amount = amount });
                 }
             }
 
+            RecalculateStaminaLimit(reason);
+            OnIntrusionsChanged?.Invoke();
+            
+            return amount;
+        }
+
+        private void RecalculateStaminaLimit(string reason)
+        {
             int previousLimit = _currentStaminaLimit;
-            _currentCarryWeight = carryWeight;
+            int totalIntrusions = 0;
+
+            foreach(var intrusion in _intrusions)
+            {
+                totalIntrusions += intrusion.Amount;
+            }
+
             _currentMaxStamina = _startingMaxStaminaAmount;
-            _currentStaminaLimit = Mathf.Clamp(_currentMaxStamina - _currentCarryWeight, 0, _currentMaxStamina);
+            _currentStaminaLimit = Mathf.Clamp(_currentMaxStamina - totalIntrusions, 0, _currentMaxStamina);
 
             if (_currentStamina > _currentStaminaLimit)
             {
@@ -231,12 +252,7 @@ namespace ProjectPrecipicePT
                 _staminaFraction = 0f;
             }
 
-            if (previousLimit != _currentStaminaLimit)
-            {
-                BeginRecoveryCooldown("Carry weight changed");
-            }
-
-            PublishStaminaChanged($"{reason}. Carry weight {_currentCarryWeight}");
+            PublishStaminaChanged($"{reason}. Total Intrusions: {totalIntrusions}");
         }
 
         private void ConsumeStaminaInt(int amount, string reason)
@@ -291,8 +307,7 @@ namespace ProjectPrecipicePT
 
         private void PublishStaminaChanged(string reason)
         {
-            // Debug.Log($"StaminaManager: {reason}. Current {_currentStamina}/{_currentStaminaLimit}, base max {_currentMaxStamina}, carry weight {_currentCarryWeight}.");
-            OnStaminaChanged?.Invoke(_currentStamina, _currentStaminaLimit, _currentMaxStamina, _currentCarryWeight);
+            OnStaminaChanged?.Invoke(_currentStamina, _currentStaminaLimit, _currentMaxStamina);
         }
     }
 }
