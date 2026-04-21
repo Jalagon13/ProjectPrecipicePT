@@ -291,7 +291,7 @@ namespace ProjectPrecipicePT
 
         private void PublishStaminaChanged(string reason)
         {
-            Debug.Log($"StaminaManager: {reason}. Current {_currentStamina}/{_currentStaminaLimit}, base max {_currentMaxStamina}, carry weight {_currentCarryWeight}.");
+            // Debug.Log($"StaminaManager: {reason}. Current {_currentStamina}/{_currentStaminaLimit}, base max {_currentMaxStamina}, carry weight {_currentCarryWeight}.");
             OnStaminaChanged?.Invoke(_currentStamina, _currentStaminaLimit, _currentMaxStamina, _currentCarryWeight);
         }
     }

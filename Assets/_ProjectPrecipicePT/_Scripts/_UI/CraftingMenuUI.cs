@@ -8,7 +8,10 @@ namespace ProjectPrecipicePT
     {
         [SerializeField] private GameObject _recipeListPanelUI;
         [SerializeField] private RecipePanelUI _recipePanelUIPrefab;
-        [SerializeField] private CraftItemPanelUI _craftItemPanelUIPrefab;
+        
+        [SerializeField] private CraftItemPanelUI _craftItemPanelUI;
+        public CraftItemPanelUI CraftItemPanelUI => _craftItemPanelUI;
+        
         [SerializeField] private List<RecipeSO> _defaultRecipes;
         
         private RecipeSO _selectedRecipe;
@@ -19,7 +22,7 @@ namespace ProjectPrecipicePT
             set 
             { 
                 _selectedRecipe = value;
-                _craftItemPanelUIPrefab.UpdatePanel(_selectedRecipe);
+                _craftItemPanelUI.UpdatePanel(_selectedRecipe);
             }  
         }
 

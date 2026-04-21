@@ -20,6 +20,8 @@ namespace ProjectPrecipicePT
         private const int _minimumHotbarSlotCount = 1;
         private const int _minimumTotalSlotCount = 8;
 
+        [SerializeField] private CraftingMenuUI _craftingMenuUI;
+
         [Header("Inventory Layout")]
         [SerializeField, Min(_minimumTotalSlotCount), Tooltip("Total number of inventory slots available to the player, including the hotbar.")]
         private int _slotCount = 24;
@@ -96,6 +98,8 @@ namespace ProjectPrecipicePT
 
         public void ToggleInventory()
         {
+            if(IsInventoryOpen && _craftingMenuUI.CraftItemPanelUI.State == CraftItemPanelState.Crafting) return;
+        
             if (IsInventoryOpen)
             {
                 CloseInventory();
@@ -198,6 +202,41 @@ namespace ProjectPrecipicePT
 
         #region Inventory Item Functions
 
+        public int GetItemAmount(ItemSO item)
+        {
+            if (item == null) return 0;
+
+            int itemCounter = 0;
+            foreach (InventorySlotItem inventorySlotItem in _slots)
+            {
+                if (inventorySlotItem.IsEmpty) continue;
+
+                if (inventorySlotItem.Item.ItemName == item.ItemName)
+                {
+                    itemCounter++;
+                }
+            }
+            
+            return itemCounter;
+        }
+
+        public bool HasItemAmount(ItemSO item, int amount)
+        {
+            int itemCounter = 0;
+            
+            foreach (InventorySlotItem inventorySlotItem in _slots)
+            {
+                if(inventorySlotItem.IsEmpty) continue;
+            
+                if(inventorySlotItem.Item.ItemName == item.ItemName)
+                {
+                    itemCounter++;
+                }
+            }
+        
+            return itemCounter >= amount;
+        }
+
         public int AddItem(ItemSO item, int amount = 1)
         {
             if (item == null || amount <= 0)
@@ -253,7 +292,7 @@ namespace ProjectPrecipicePT
             return leftOvers;
         }
 
-        public int Removeitem(ItemSO item, int amount = 1)
+        public int RemoveItem(ItemSO item, int amount = 1)
         {
             if (item == null || amount <= 0)
             {
@@ -293,7 +332,7 @@ namespace ProjectPrecipicePT
                     continue;
                 }
 
-                int remainingAmount = Removeitem(slotItem.Item);
+                int remainingAmount = RemoveItem(slotItem.Item);
                 if (remainingAmount > 0)
                 {
                     leftOvers.Add(new InventorySlotItem(slotItem.Item));

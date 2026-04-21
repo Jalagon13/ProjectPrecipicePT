@@ -10,9 +10,11 @@ namespace ProjectPrecipicePT
         [SerializeField] private Image _iconImage;
         [SerializeField] private TextMeshProUGUI _nameText;
         [SerializeField] private TextMeshProUGUI _amountNeededText;
-        [SerializeField] private Image _NotAvailableOverlay;
+        [SerializeField] private Image _notAvailableOverlay;
         
         private ItemRequirement _itemReq;
+        
+        public bool HasIngredient { get; private set; }
         
         private void Start()
         {
@@ -24,25 +26,25 @@ namespace ProjectPrecipicePT
             InventoryManager.Instance.OnInventoryChanged -= UpdateIngredientStatus;
         }
 
-        private void UpdateIngredientStatus()
-        {
-            Debug.Log($"Ingredient Panel Updated");
-        }
-
         public void Setup(ItemRequirement itemRequirement)
         {
             _iconImage.sprite = itemRequirement.Item.InventoryIcon;
             _nameText.text = itemRequirement.Item.ItemName;
-            _amountNeededText.text = $"x{itemRequirement.Amount}";
             _itemReq = itemRequirement;
+
+            UpdateIngredientStatus();
         }
-        
-        private bool HasRequiredIngredient()
+
+        private void UpdateIngredientStatus()
         {
-            // Loop through the inventory and check if I have enough of this ingredient or not.
-            // Create a function in the InventoryManager for this
-        
-            return true;
+            if(_itemReq.Item == null) return;
+            
+            Debug.Log($"Ingredient Panel Updated");
+
+            int currentAmount = InventoryManager.Instance.GetItemAmount(_itemReq.Item);
+            _amountNeededText.text = $"{currentAmount}/{_itemReq.Amount}";
+            HasIngredient = InventoryManager.Instance.HasItemAmount(_itemReq.Item, _itemReq.Amount);
+            _notAvailableOverlay.enabled = !HasIngredient;
         }
     }
 }

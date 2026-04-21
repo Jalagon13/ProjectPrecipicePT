@@ -23,6 +23,8 @@ namespace ProjectPrecipicePT
         
         public void OnRecipePanelClicked()
         {
+            if(_craftingMenuUI.CraftItemPanelUI.State == CraftItemPanelState.Crafting) return;
+        
             _craftingMenuUI.SelectedRecipe = _recipe;
         }
     }
