@@ -1703,7 +1703,8 @@ MonoBehaviour:
   _hotbarSlotCount: 8
   _initialDelay: 0.25
   _delayBetweenItemsGiven: 0.2
-  _startingItems: []
+  _startingItems:
+  - _item: {fileID: 11400000, guid: f2d7dd734d1754f8e93c28c982488d6a, type: 2}
 --- !u!114 &314856428
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -10318,6 +10319,7 @@ GameObject:
   - component: {fileID: 1948954845}
   - component: {fileID: 1948954844}
   - component: {fileID: 1948954847}
+  - component: {fileID: 1948954848}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -10482,6 +10484,18 @@ MonoBehaviour:
   _climbJumpDistance: 1.5
   _climbJumpDuration: 0.4
   _climbJumpCooldown: 1
+--- !u!114 &1948954848
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1948954840}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1f811af92eb31436c99d831275e444d3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ProjectPrecipicePT.PlayerDeathState
 --- !u!1001 &1986061477
 PrefabInstance:
   m_ObjectHideFlags: 0

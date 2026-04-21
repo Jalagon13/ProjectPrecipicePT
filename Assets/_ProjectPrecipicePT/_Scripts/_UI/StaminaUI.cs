@@ -25,28 +25,22 @@ namespace ProjectPrecipicePT
 
         private void Start()
         {
-            if (StaminaManager.Instance != null)
-            {
-                StaminaManager.Instance.OnStaminaChanged += HandleStaminaChanged;
+            StaminaManager.Instance.OnStaminaChanged += HandleStaminaChanged;
                 
-                // Initialize to current state immediately
-                _targetCurrentStamina = StaminaManager.Instance.CurrentStamina;
-                _targetBaseMaxStamina = StaminaManager.Instance.CurrentMaxStamina;
-                _targetCarryWeight = StaminaManager.Instance.CurrentCarryWeight;
+            // Initialize to current state immediately
+            _targetCurrentStamina = StaminaManager.Instance.CurrentStamina;
+            _targetBaseMaxStamina = StaminaManager.Instance.CurrentMaxStamina;
+            _targetCarryWeight = StaminaManager.Instance.CurrentCarryWeight;
 
-                _visualCurrentStamina = _targetCurrentStamina;
-                _visualCarryWeight = _targetCarryWeight;
-                
-                UpdateUIBars();
-            }
+            _visualCurrentStamina = _targetCurrentStamina;
+            _visualCarryWeight = _targetCarryWeight;
+            
+            UpdateUIBars();
         }
 
         private void OnDestroy()
         {
-            if (StaminaManager.Instance != null)
-            {
-                StaminaManager.Instance.OnStaminaChanged -= HandleStaminaChanged;
-            }
+            StaminaManager.Instance.OnStaminaChanged -= HandleStaminaChanged;
         }
 
         private void Update()
