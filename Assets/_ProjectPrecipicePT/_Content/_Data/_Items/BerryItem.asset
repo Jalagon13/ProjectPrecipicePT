@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: BerryItem
   m_EditorClassIdentifier: Assembly-CSharp::ProjectPrecipicePT.ConsumableItemSO
   _itemName: Berry
-  _itemWeight: 5
+  _itemWeight: 16
   _itemDescription: 
   _inventoryIcon: {fileID: 21300000, guid: c23294d57f74bea4b9a439f033a6bf15, type: 3}
   _worldItemPrefab: {fileID: 0}
-  <ReplenishValue>k__BackingField: 8
+  <ReplenishValue>k__BackingField: 16

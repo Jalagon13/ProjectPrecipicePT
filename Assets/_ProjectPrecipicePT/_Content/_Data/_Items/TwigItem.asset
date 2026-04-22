@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: TwigItem
   m_EditorClassIdentifier: Assembly-CSharp::ProjectPrecipicePT.ItemSO
   _itemName: Twig
-  _itemWeight: 8
+  _itemWeight: 18
   _itemDescription: 
   _inventoryIcon: {fileID: 21300012, guid: 358b5d9f23bc9413e87c9948acc67ee1, type: 3}
   _worldItemPrefab: {fileID: 0}
