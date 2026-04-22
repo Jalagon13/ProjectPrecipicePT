@@ -398,3 +398,4 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ProjectPrecipicePT.WorldItem
   _itemSO: {fileID: 0}
+  CanInteractWith: 1

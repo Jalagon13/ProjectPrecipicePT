@@ -21,6 +21,8 @@ namespace ProjectPrecipicePT
         private const int _minimumTotalSlotCount = 8;
 
         [SerializeField] private CraftingMenuUI _craftingMenuUI;
+        public CraftingMenuUI CraftingMenuUI => _craftingMenuUI;
+
 
         [Header("Inventory Layout")]
         [SerializeField, Min(_minimumTotalSlotCount), Tooltip("Total number of inventory slots available to the player, including the hotbar.")]
@@ -28,6 +30,8 @@ namespace ProjectPrecipicePT
 
         [SerializeField, Min(_minimumHotbarSlotCount), Tooltip("Number of slots reserved for the hotbar at the bottom of the screen.")]
         private int _hotbarSlotCount = 8;
+        public int HotbarSlotCount => Mathf.Min(_hotbarSlotCount, _slots.Count);
+        public int SelectedHotbarSlotIndex { get; private set; } = -1;
 
         [Header("Starting Items")]
         [SerializeField] private float _initialDelay;
@@ -36,13 +40,11 @@ namespace ProjectPrecipicePT
 
         private readonly List<InventorySlotItem> _slots = new();
         public List<InventorySlotItem> Slots => _slots;
+        public int SlotCount => _slots.Count;
 
         public InventorySlotItem CursorStack { get; private set; } = new();
         public InventorySlotItem SelectedHotbarStack { get; private set; } = new();
-
-        public int SelectedHotbarSlotIndex { get; private set; } = -1;
-        public int HotbarSlotCount => Mathf.Min(_hotbarSlotCount, _slots.Count);
-        public int SlotCount => _slots.Count;
+        
         public bool IsInventoryOpen { get; private set; }
         public bool IsFull => !_slots.Exists(slot => slot.IsEmpty);
 
@@ -237,6 +239,12 @@ namespace ProjectPrecipicePT
 
         #region Inventory Item Functions
 
+        public void ClearSelectedSlotItem()
+        {
+            _slots[SelectedHotbarSlotIndex].Clear();
+            RefreshAfterInventoryChange();
+        }
+
         public int GetItemAmount(ItemSO item)
         {
             if (item == null) return 0;
@@ -396,7 +404,7 @@ namespace ProjectPrecipicePT
             }
         }
 
-        private void RefreshAfterInventoryChange()
+        public void RefreshAfterInventoryChange()
         {
             UpdateSelectedHotbarStack();
             OnInventoryChanged?.Invoke();
@@ -538,7 +546,6 @@ namespace ProjectPrecipicePT
 
             SelectedHotbarSlotIndex = newIndex;
             UpdateSelectedHotbarStack();
-            OnSelectedHotbarSlotChanged?.Invoke(SelectedHotbarSlotIndex, SelectedHotbarStack.Clone());
         }
 
         private void UpdateSelectedHotbarStack()
@@ -546,11 +553,13 @@ namespace ProjectPrecipicePT
             if (!IsValidSlotIndex(SelectedHotbarSlotIndex))
             {
                 SelectedHotbarStack = new InventorySlotItem();
+                OnSelectedHotbarSlotChanged?.Invoke(SelectedHotbarSlotIndex, SelectedHotbarStack.Clone());
                 Debug.Log($"Invalid hotbar slot index: {SelectedHotbarSlotIndex}");
                 return;
             }
 
             SelectedHotbarStack = _slots[SelectedHotbarSlotIndex].Clone();
+            OnSelectedHotbarSlotChanged?.Invoke(SelectedHotbarSlotIndex, SelectedHotbarStack.Clone());
         }
 
         public InventorySlotItem GetSlot(int slotIndex)

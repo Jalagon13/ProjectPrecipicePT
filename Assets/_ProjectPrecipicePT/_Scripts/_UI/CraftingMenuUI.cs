@@ -15,6 +15,8 @@ namespace ProjectPrecipicePT
         [SerializeField] private List<RecipeSO> _defaultRecipes;
         
         private RecipeSO _selectedRecipe;
+        
+        public bool CraftingMenuUIOpen { get; private set; }
 
         public RecipeSO SelectedRecipe 
         { 
@@ -55,11 +57,15 @@ namespace ProjectPrecipicePT
             gameObject.SetActive(true);
             ClearRecipeListPanelUI();
             PopulateRecipeListPanelUI();
+
+            CraftingMenuUIOpen = true;
         }
         
         private void HideCraftingMenu()
         {
             gameObject.SetActive(false);
+
+            CraftingMenuUIOpen = false;
         }
 
         private void ClearRecipeListPanelUI()

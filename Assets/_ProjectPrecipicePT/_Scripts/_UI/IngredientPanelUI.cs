@@ -39,8 +39,6 @@ namespace ProjectPrecipicePT
         {
             if(_itemReq.Item == null) return;
             
-            Debug.Log($"Ingredient Panel Updated");
-
             int currentAmount = InventoryManager.Instance.GetItemAmount(_itemReq.Item);
             _amountNeededText.text = $"{currentAmount}/{_itemReq.Amount}";
             HasIngredient = InventoryManager.Instance.HasItemAmount(_itemReq.Item, _itemReq.Amount);

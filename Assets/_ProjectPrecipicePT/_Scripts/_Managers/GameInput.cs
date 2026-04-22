@@ -11,6 +11,8 @@ namespace ProjectPrecipicePT
         public event EventHandler<InputAction.CallbackContext> OnMove;
         public event EventHandler<InputAction.CallbackContext> OnToggleInventory;
         public event EventHandler<InputAction.CallbackContext> OnInteract;
+        public event EventHandler<InputAction.CallbackContext> OnPrimaryAction;
+        public event EventHandler<InputAction.CallbackContext> OnSecondaryAction;
 
         public event EventHandler<InputAction.CallbackContext> OnScrollWheel;
         public event EventHandler<InputAction.CallbackContext> OnSelectSlot;
@@ -19,6 +21,8 @@ namespace ProjectPrecipicePT
         private bool _isGameplayInputBlocked;
 
         public bool IsHoldingDownInteract { get; private set; }
+        public bool IsHoldingDownPrimaryAction { get; private set; }
+        public bool IsHoldingDownSecondaryAction { get; private set; }
 
         private void Awake()
         {
@@ -37,8 +41,18 @@ namespace ProjectPrecipicePT
             _playerInput.Player.Move.performed += GameInput_OnMove;
             _playerInput.Player.Move.canceled += GameInput_OnMove;
             _playerInput.Player.ToggleInventory.started += GameInput_OnToggleInventory;
-            _playerInput.Player.Interact.started += GameInput_OnInteract;
             
+            _playerInput.Player.Interact.started += GameInput_OnInteract;
+            _playerInput.Player.Interact.performed += GameInput_OnInteract;
+            _playerInput.Player.Interact.canceled += GameInput_OnInteract;
+            
+            _playerInput.Player.PrimaryAction.started += GameInput_OnPrimaryAction;
+            _playerInput.Player.PrimaryAction.performed += GameInput_OnPrimaryAction;
+            _playerInput.Player.PrimaryAction.canceled += GameInput_OnPrimaryAction;
+            _playerInput.Player.SecondaryAction.started += GameInput_OnSecondaryAction;
+            _playerInput.Player.SecondaryAction.performed += GameInput_OnSecondaryAction;
+            _playerInput.Player.SecondaryAction.canceled += GameInput_OnSecondaryAction;
+
             _playerInput.UI.ScrollWheel.performed += PlayerInput_OnScrollWheel;
             _playerInput.UI.SelectSlot.started += PlayerInput_OnSelectSlot;
         }
@@ -54,7 +68,17 @@ namespace ProjectPrecipicePT
             _playerInput.Player.Move.performed -= GameInput_OnMove;
             _playerInput.Player.Move.canceled -= GameInput_OnMove;
             _playerInput.Player.ToggleInventory.started -= GameInput_OnToggleInventory;
+            
             _playerInput.Player.Interact.started -= GameInput_OnInteract;
+            _playerInput.Player.Interact.performed -= GameInput_OnInteract;
+            _playerInput.Player.Interact.canceled -= GameInput_OnInteract;
+            
+            _playerInput.Player.PrimaryAction.started -= GameInput_OnPrimaryAction;
+            _playerInput.Player.PrimaryAction.performed -= GameInput_OnPrimaryAction;
+            _playerInput.Player.PrimaryAction.canceled -= GameInput_OnPrimaryAction;
+            _playerInput.Player.SecondaryAction.started -= GameInput_OnSecondaryAction;
+            _playerInput.Player.SecondaryAction.performed -= GameInput_OnSecondaryAction;
+            _playerInput.Player.SecondaryAction.canceled -= GameInput_OnSecondaryAction;
 
             _playerInput.UI.ScrollWheel.performed -= PlayerInput_OnScrollWheel;
             _playerInput.UI.SelectSlot.started -= PlayerInput_OnSelectSlot;
@@ -62,6 +86,18 @@ namespace ProjectPrecipicePT
 
             _playerInput.Disable();
             _playerInput.Dispose();
+        }
+
+        private void GameInput_OnPrimaryAction(InputAction.CallbackContext context)
+        {
+            IsHoldingDownPrimaryAction = context.ReadValueAsButton();
+            OnPrimaryAction?.Invoke(this, context);
+        }
+
+        private void GameInput_OnSecondaryAction(InputAction.CallbackContext context)
+        {
+            IsHoldingDownSecondaryAction = context.ReadValueAsButton();
+            OnSecondaryAction?.Invoke(this, context);
         }
 
         private void GameInput_OnInteract(InputAction.CallbackContext context)
