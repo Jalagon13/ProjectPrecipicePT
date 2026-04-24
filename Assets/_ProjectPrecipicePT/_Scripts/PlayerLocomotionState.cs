@@ -19,6 +19,18 @@ namespace ProjectPrecipicePT
         [SerializeField, Tooltip("Minimum time that must pass before another jump can start.")]
         private float _jumpCooldown = 0.15f;
 
+        [Header("Coyote Timing")]
+        [SerializeField, Tooltip("Whether jump coyote timing is enabled.")]
+        private bool _useJumpCoyoteTime = true;
+        [SerializeField, Min(0f), Tooltip("How long a jump remains valid after the player leaves the ground.")]
+        private float _jumpCoyoteTime = 0.12f;
+
+        [Header("Jump Buffering")]
+        [SerializeField, Tooltip("Whether jump input buffering is enabled.")]
+        private bool _useJumpBuffering = true;
+        [SerializeField, Min(0f), Tooltip("How long a jump press stays queued before the player can jump.")]
+        private float _jumpBufferTime = 0.12f;
+
         [Header("Vertical Movement")]
         [SerializeField, Tooltip("Downward acceleration applied while the player is airborne.")]
         private float _gravity = 25f;
@@ -46,6 +58,9 @@ namespace ProjectPrecipicePT
         private Player _player;
         private float _verticalVelocity;
         private float _nextJumpTime;
+        private Timer _jumpCoyoteTimer;
+        private Timer _jumpBufferTimer;
+        private bool _wasGroundedLastFrame;
 
         public float LookSensitivityX => _lookSensitivityX;
         public float LookSensitivityY => _lookSensitivityY;
@@ -56,6 +71,13 @@ namespace ProjectPrecipicePT
         private void Awake()
         {
             _player = GetComponent<Player>();
+            InitializeJumpTimers();
+            _wasGroundedLastFrame = _player.CharacterController != null && _player.CharacterController.isGrounded;
+        }
+
+        private void OnValidate()
+        {
+            InitializeJumpTimers();
         }
 
         // Normal movement update:
@@ -68,6 +90,8 @@ namespace ProjectPrecipicePT
             bool isGrounded = _player.CharacterController.isGrounded;
             Vector3 moveDirection = GetMoveDirection(moveInput);
 
+            UpdateJumpBufferTimer();
+            UpdateJumpCoyoteTimer(isGrounded);
             UpdateVerticalVelocity(isGrounded);
 
             float moveSpeed = GetMoveSpeed(moveInput);
@@ -109,6 +133,12 @@ namespace ProjectPrecipicePT
                 return;
             }
 
+            if (HasJumpCoyoteWindow() && TryStartJump())
+            {
+                StopJumpCoyoteTimer();
+                return;
+            }
+
             ApplyAirborneGravity();
         }
 
@@ -119,18 +149,7 @@ namespace ProjectPrecipicePT
                 _verticalVelocity = -_stickToGroundForce;
             }
 
-            if (!CanStartJump())
-            {
-                return;
-            }
-
-            if (StaminaManager.Instance != null && !StaminaManager.Instance.TryConsumeJumpStamina("Ground jump"))
-            {
-                return;
-            }
-
-            _verticalVelocity = Mathf.Sqrt(_jumpHeight * 2f * _gravity);
-            _nextJumpTime = Time.time + _jumpCooldown;
+            TryStartJump();
         }
 
         private void ApplyAirborneGravity()
@@ -140,7 +159,137 @@ namespace ProjectPrecipicePT
 
         private bool CanStartJump()
         {
-            return GameInput.Instance.IsJumpPressedThisFrame() && Time.time >= _nextJumpTime && StaminaManager.Instance.CanStartJump();
+            return HasJumpInputBuffered() && Time.time >= _nextJumpTime && StaminaManager.Instance.CanStartJump();
+        }
+
+        private bool TryStartJump()
+        {
+            if (!CanStartJump())
+            {
+                return false;
+            }
+
+            if (StaminaManager.Instance != null && !StaminaManager.Instance.TryConsumeJumpStamina("Ground jump"))
+            {
+                return false;
+            }
+
+            _verticalVelocity = Mathf.Sqrt(_jumpHeight * 2f * _gravity);
+            _nextJumpTime = Time.time + _jumpCooldown;
+            ConsumeJumpInputBuffer();
+            return true;
+        }
+
+        private void UpdateJumpBufferTimer()
+        {
+            if (_jumpBufferTimer == null)
+            {
+                return;
+            }
+
+            if (GameInput.Instance.IsJumpPressedThisFrame())
+            {
+                _jumpBufferTimer.Reset();
+                _jumpBufferTimer.IsPaused = false;
+            }
+
+            _jumpBufferTimer.Tick(Time.deltaTime);
+        }
+
+        private void UpdateJumpCoyoteTimer(bool isGrounded)
+        {
+            if (_jumpCoyoteTimer == null)
+            {
+                _wasGroundedLastFrame = isGrounded;
+                return;
+            }
+
+            if (isGrounded)
+            {
+                StopJumpCoyoteTimer();
+                _wasGroundedLastFrame = true;
+                return;
+            }
+
+            if (_wasGroundedLastFrame && _verticalVelocity <= 0f)
+            {
+                _jumpCoyoteTimer.Reset();
+                _jumpCoyoteTimer.IsPaused = false;
+            }
+
+            _jumpCoyoteTimer.Tick(Time.deltaTime);
+            _wasGroundedLastFrame = false;
+        }
+
+        private bool HasJumpCoyoteWindow()
+        {
+            return _useJumpCoyoteTime &&
+                   _jumpCoyoteTimer != null &&
+                   _jumpCoyoteTimer.RemainingSeconds > 0f;
+        }
+
+        private bool HasJumpInputBuffered()
+        {
+            if (_useJumpBuffering)
+            {
+                return _jumpBufferTimer != null && _jumpBufferTimer.RemainingSeconds > 0f;
+            }
+
+            return GameInput.Instance.IsJumpPressedThisFrame();
+        }
+
+        private void ConsumeJumpInputBuffer()
+        {
+            if (_jumpBufferTimer == null)
+            {
+                return;
+            }
+
+            _jumpBufferTimer.IsPaused = true;
+            _jumpBufferTimer.RemainingSeconds = 0f;
+        }
+
+        private void StopJumpCoyoteTimer()
+        {
+            if (_jumpCoyoteTimer == null)
+            {
+                return;
+            }
+
+            _jumpCoyoteTimer.IsPaused = true;
+            _jumpCoyoteTimer.RemainingSeconds = 0f;
+        }
+
+        private void InitializeJumpTimers()
+        {
+            InitializeJumpCoyoteTimer();
+            InitializeJumpBufferTimer();
+        }
+
+        private void InitializeJumpCoyoteTimer()
+        {
+            if (!_useJumpCoyoteTime || _jumpCoyoteTime <= 0f)
+            {
+                _jumpCoyoteTimer = null;
+                return;
+            }
+
+            _jumpCoyoteTimer = new Timer(_jumpCoyoteTime);
+            _jumpCoyoteTimer.IsPaused = true;
+            _jumpCoyoteTimer.RemainingSeconds = 0f;
+        }
+
+        private void InitializeJumpBufferTimer()
+        {
+            if (!_useJumpBuffering || _jumpBufferTime <= 0f)
+            {
+                _jumpBufferTimer = null;
+                return;
+            }
+
+            _jumpBufferTimer = new Timer(_jumpBufferTime);
+            _jumpBufferTimer.IsPaused = true;
+            _jumpBufferTimer.RemainingSeconds = 0f;
         }
 
         private float GetMoveSpeed(Vector2 moveInput)
