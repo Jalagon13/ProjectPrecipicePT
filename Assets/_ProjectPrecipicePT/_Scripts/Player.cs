@@ -23,8 +23,10 @@ namespace ProjectPrecipicePT
             Dead
         }
 
-        private CharacterController _characterController;
         [SerializeField] private Transform _cameraYawPivot;
+        [SerializeField] private Canvas _playerCanvas;
+        
+        private CharacterController _characterController;
         private Transform _cameraTransform;
         private Transform _modelTransform;
         private PlayerLocomotionState _locomotionState;
@@ -55,7 +57,7 @@ namespace ProjectPrecipicePT
         private void Awake()
         {
             Instance = this;
-
+            _playerCanvas.gameObject.SetActive(true);
 
             CacheReferences();
             SetupCameraHierarchy();
